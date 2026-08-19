@@ -114,7 +114,7 @@ function popupHtml(m){
   return '<b>'+m.name+'</b><br>'+
     '<span style="color:#444">园区代码 <b>'+m.c+'</b> · 国家编号 '+m.e+'</span><br>'+
     m.addr+'<br>负责人: <b>'+m.person+'</b>'+
-    (m.last?('<br>2025年最后检查: <b>'+m.last+'</b>'):'')+
+    '<br>2025年最后检查: <b>'+(m.last||'无')+'</b>'+
     '<br><button class="ckbtn '+(done?'done':'not')+'" onclick="toggleCheck(\''+m.e+'\')">'+
     (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>';
 }
