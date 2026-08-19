@@ -27,13 +27,13 @@
  #panel{position:absolute;top:60px;left:10px;z-index:1001;background:rgba(255,255,255,.96);border-radius:8px;
    padding:10px 12px;box-shadow:0 2px 8px rgba(0,0,0,.25);max-width:240px;max-height:70vh;overflow:auto;font-size:12px;display:block}
  #panel h2{margin:0 0 6px;font-size:14px}
- #panel .pers{margin:3px 0;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 4px;border-radius:6px}
+ #panel .pers{margin:3px 0;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 4px;border-radius:6px;flex-wrap:wrap;position:relative}
  #panel .pers.active{background:#eef2ff}
  #panel .pers:hover{background:#f5f5f5}
  #panel .dot{width:12px;height:12px;border-radius:50%;flex:none;border:1px solid #555}
  #panel .pck{flex:none;margin:0}
  #panel .toggle{color:#999;cursor:pointer;margin-left:auto}
- #panel .cnt2{color:#555;margin-left:6px}
+ #panel .cnt2{color:#555;margin-left:6px;white-space:nowrap}
  #panel .ilist{flex-basis:100%;width:100%;max-height:220px;overflow:auto;margin-top:2px}
  #panel .iitem{display:flex;align-items:center;gap:6px;padding:3px 2px;border-top:1px solid #f0f0f0;font-size:12px}
  #panel .iname{flex:1;word-break:break-all}
@@ -145,19 +145,17 @@ function buildLegend(){
   document.getElementById('legend').innerHTML = html;
   document.querySelectorAll('.pers[data-p]').forEach(el=>{
     el.addEventListener('click',(e)=>{
-      if (e.target.closest('.pck')||e.target.closest('.ckbox')||e.target.closest('.toggle')||e.target.closest('.ilist')) return;
-      const p = el.dataset.p;
-      if (p==='') selPersons.clear();
-      else {
-        if (selPersons.has(p)) selPersons.delete(p); else selPersons.add(p);
-      }
-      buildLegend();
-      refreshVisibility();
-    });
-    el.querySelector('.toggle').addEventListener('click',(e)=>{
-      e.stopPropagation();
+      if (e.target.closest('.pck')||e.target.closest('.ckbox')) return;
       const il = el.querySelector('.ilist');
-      il.style.display = il.style.display==='none' ? 'block' : 'none';
+      if (il) {
+        // 点名字/箭头 = 展开查看该负责人机构清单
+        il.style.display = il.style.display==='none' ? 'block' : 'none';
+      } else {
+        // 全部行 = 清空负责人筛选
+        selPersons.clear();
+        buildLegend();
+        refreshVisibility();
+      }
     });
   });
   document.querySelectorAll('.pck').forEach(cb=>{
@@ -190,13 +188,13 @@ function refreshVisibility(){
   document.getElementById('ckcnt').textContent = cnt;
   document.getElementById('hidebtn').classList.toggle('off', !hideChecked);
   document.getElementById('hidebtn').textContent = hideChecked ? '显示已检查' : '隐藏已检查';
-  // 更新每人剩余家数
+  // 更新每人 共/已检/剩余
   document.querySelectorAll('.pers').forEach(el=>{
     const p = el.dataset.p;
-    const tot = p==='' ? DATA.members.length : DATA.members.filter(m=>m.person===p).length;
-    const rem = p==='' ? DATA.members.filter(m=>!checked.has(m.e)).length
-                        : DATA.members.filter(m=>m.person===p && !checked.has(m.e)).length;
-    el.querySelector('.cnt2').textContent = '剩 '+rem+'/'+tot+' 家';
+    const members = p==='' ? DATA.members : DATA.members.filter(m=>m.person===p);
+    const tot = members.length;
+    const don = members.filter(m=>checked.has(m.e)).length;
+    el.querySelector('.cnt2').textContent = '共'+tot+'家 · 已检'+don+'家 · 剩'+(tot-don)+'家';
   });
   // 同步展开清单里的机构勾选状态
   document.querySelectorAll('.ckbox').forEach(cb=>{
