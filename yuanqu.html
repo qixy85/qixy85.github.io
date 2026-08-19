@@ -38,8 +38,6 @@
  #note{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:1001;background:rgba(255,255,255,.9);
    border-radius:8px;padding:6px 12px;font-size:11px;color:#666;box-shadow:0 1px 6px rgba(0,0,0,.2);max-width:90vw;text-align:center}
  .leaflet-popup-content{font-size:13px}
- .date-tip{background:transparent;border:none;box-shadow:none;color:#444;font-size:10px;font-weight:bold;
-   text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff}
  .ckbtn{margin-top:6px;padding:6px 10px;border:none;border-radius:6px;font-size:13px;cursor:pointer;width:100%}
  .ckbtn.done{background:#4caf50;color:#fff}
  .ckbtn.not{background:#eee;color:#333}
@@ -103,9 +101,6 @@ DATA.members.forEach(m=>{
     fillColor: col, fillOpacity: 0.9
   }).addTo(map);
   mk.bindPopup(popupHtml(m));
-  if (m.last) {
-    mk.bindTooltip(m.last, {permanent:true, direction:'top', offset:[0,-6], className:'date-tip', opacity:1});
-  }
   byE[m.e] = {mk, m};
 });
 function popupHtml(m){
