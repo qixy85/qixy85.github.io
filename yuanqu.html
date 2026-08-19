@@ -27,14 +27,15 @@
  #panel{position:absolute;top:60px;left:10px;z-index:1001;background:rgba(255,255,255,.96);border-radius:8px;
    padding:10px 12px;box-shadow:0 2px 8px rgba(0,0,0,.25);max-width:240px;max-height:70vh;overflow:auto;font-size:12px;display:block}
  #panel h2{margin:0 0 6px;font-size:14px}
- #panel .pers{margin:3px 0;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 4px;border-radius:6px;flex-wrap:wrap;position:relative}
+ #panel .pers{margin:4px 0;cursor:pointer;padding:4px;border-radius:6px}
  #panel .pers.active{background:#eef2ff}
  #panel .pers:hover{background:#f5f5f5}
+ #panel .pers-head{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
  #panel .dot{width:12px;height:12px;border-radius:50%;flex:none;border:1px solid #555}
  #panel .pck{flex:none;margin:0}
- #panel .toggle{color:#999;cursor:pointer;margin-left:auto}
- #panel .cnt2{color:#555;margin-left:6px;white-space:nowrap}
- #panel .ilist{flex-basis:100%;width:100%;max-height:220px;overflow:auto;margin-top:2px}
+ #panel .toggle{color:#999;cursor:pointer;margin-left:auto;flex:none}
+ #panel .cnt2{color:#555;margin-left:4px;white-space:nowrap;font-size:11px}
+ #panel .ilist{max-height:220px;overflow:auto;margin-top:3px;border-top:1px solid #eee}
  #panel .iitem{display:flex;align-items:center;gap:6px;padding:3px 2px;border-top:1px solid #f0f0f0;font-size:12px}
  #panel .iname{flex:1;word-break:break-all}
  #panel .istat{color:#4caf50;font-size:11px;flex:none}
@@ -127,20 +128,28 @@ function mkStyle(m){
 
 // ===== 图例(负责人多选,可展开看机构清单) =====
 function buildLegend(){
-  let html = '<div class="pers'+(selPersons.size===0?' active':'')+'" data-p=""><span class="dot" style="background:#555"></span><b>全部</b><span class="cnt2"></span></div>';
+  let html = '<div class="pers'+(selPersons.size===0?' active':'')+'" data-p="">';
+  html += '<div class="pers-head"><span class="dot" style="background:#555"></span><b>全部</b><span class="cnt2"></span></div>';
+  html += '</div>';
   DATA.persons.forEach(p=>{
     const on = selPersons.has(p);
-    let items = DATA.members.filter(m=>m.person===p).map(m=>{
-      return '<div class="iitem'+(checked.has(m.e)?' done':'')+'">'+
-        '<input type="checkbox" class="ckbox" data-e="'+m.e+'" '+(checked.has(m.e)?'checked':'')+'>'+
-        '<span class="iname">'+m.name+'</span>'+
-        (checked.has(m.e)?'<span class="istat">✓已检查</span>':'')+'</div>';
-    }).join('');
+    let items = DATA.members.filter(m=>m.person===p)
+      .sort((a,b)=>(checked.has(a.e)?1:0)-(checked.has(b.e)?1:0))   // 未检查在前
+      .map(m=>{
+        return '<div class="iitem'+(checked.has(m.e)?' done':'')+'">'+
+          '<input type="checkbox" class="ckbox" data-e="'+m.e+'" '+(checked.has(m.e)?'checked':'')+'>'+
+          '<span class="iname">'+m.name+'</span>'+
+          (checked.has(m.e)?'<span class="istat">✓已检查</span>':'')+'</div>';
+      }).join('');
     html += '<div class="pers'+(on?' active':'')+'" data-p="'+p+'">'+
-      '<input type="checkbox" class="pck" data-p="'+p+'" '+(on?'checked':'')+'>'+
-      '<span class="dot" style="background:'+(DATA.pcolors[p]||'#888')+'"></span>'+p+
-      '<span class="toggle">▸</span><span class="cnt2"></span>'+
-      '<div class="ilist" style="display:none">'+items+'</div></div>';
+      '<div class="pers-head">'+
+        '<input type="checkbox" class="pck" data-p="'+p+'" '+(on?'checked':'')+'>'+
+        '<span class="dot" style="background:'+(DATA.pcolors[p]||'#888')+'"></span>'+p+
+        '<span class="cnt2"></span>'+
+        '<span class="toggle">▸</span>'+
+      '</div>'+
+      '<div class="ilist" style="display:none">'+items+'</div>'+
+    '</div>';
   });
   document.getElementById('legend').innerHTML = html;
   document.querySelectorAll('.pers[data-p]').forEach(el=>{
