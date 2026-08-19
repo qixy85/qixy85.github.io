@@ -32,7 +32,13 @@
  #panel .pers:hover{background:#f5f5f5}
  #panel .dot{width:12px;height:12px;border-radius:50%;flex:none;border:1px solid #555}
  #panel .pck{flex:none;margin:0}
- #panel .cnt2{color:#555;margin-left:auto}
+ #panel .toggle{color:#999;cursor:pointer;margin-left:auto}
+ #panel .cnt2{color:#555;margin-left:6px}
+ #panel .ilist{flex-basis:100%;width:100%;max-height:220px;overflow:auto;margin-top:2px}
+ #panel .iitem{display:flex;align-items:center;gap:6px;padding:3px 2px;border-top:1px solid #f0f0f0;font-size:12px}
+ #panel .iname{flex:1;word-break:break-all}
+ #panel .istat{color:#4caf50;font-size:11px;flex:none}
+ #panel .iitem.done .iname{color:#999;text-decoration:line-through}
  #togglePanel{position:absolute;top:10px;left:10px;z-index:1001;display:none;padding:10px 14px;border:none;border-radius:8px;
    background:#333;color:#fff;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
  #note{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:1001;background:rgba(255,255,255,.9);
@@ -119,25 +125,39 @@ function mkStyle(m){
            fillOpacity: done ? 0.4 : 0.9 };
 }
 
-// ===== 图例(负责人多选,显示剩余) =====
+// ===== 图例(负责人多选,可展开看机构清单) =====
 function buildLegend(){
   let html = '<div class="pers'+(selPersons.size===0?' active':'')+'" data-p=""><span class="dot" style="background:#555"></span><b>全部</b><span class="cnt2"></span></div>';
   DATA.persons.forEach(p=>{
     const on = selPersons.has(p);
-    html += '<div class="pers'+(on?' active':'')+'" data-p="'+p+'"><input type="checkbox" class="pck" data-p="'+p+'" '+(on?'checked':'')+'><span class="dot" style="background:'+(DATA.pcolors[p]||'#888')+'"></span>'+p+'<span class="cnt2"></span></div>';
+    let items = DATA.members.filter(m=>m.person===p).map(m=>{
+      return '<div class="iitem'+(checked.has(m.e)?' done':'')+'">'+
+        '<input type="checkbox" class="ckbox" data-e="'+m.e+'" '+(checked.has(m.e)?'checked':'')+'>'+
+        '<span class="iname">'+m.name+'</span>'+
+        (checked.has(m.e)?'<span class="istat">✓已检查</span>':'')+'</div>';
+    }).join('');
+    html += '<div class="pers'+(on?' active':'')+'" data-p="'+p+'">'+
+      '<input type="checkbox" class="pck" data-p="'+p+'" '+(on?'checked':'')+'>'+
+      '<span class="dot" style="background:'+(DATA.pcolors[p]||'#888')+'"></span>'+p+
+      '<span class="toggle">▸</span><span class="cnt2"></span>'+
+      '<div class="ilist" style="display:none">'+items+'</div></div>';
   });
   document.getElementById('legend').innerHTML = html;
   document.querySelectorAll('.pers[data-p]').forEach(el=>{
     el.addEventListener('click',(e)=>{
-      if (e.target.classList.contains('pck')) return;
+      if (e.target.closest('.pck')||e.target.closest('.ckbox')||e.target.closest('.toggle')||e.target.closest('.ilist')) return;
       const p = el.dataset.p;
       if (p==='') selPersons.clear();
       else {
         if (selPersons.has(p)) selPersons.delete(p); else selPersons.add(p);
-        if (selPersons.size===0) selPersons = new Set();
       }
       buildLegend();
       refreshVisibility();
+    });
+    el.querySelector('.toggle').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const il = el.querySelector('.ilist');
+      il.style.display = il.style.display==='none' ? 'block' : 'none';
     });
   });
   document.querySelectorAll('.pck').forEach(cb=>{
@@ -147,6 +167,9 @@ function buildLegend(){
       buildLegend();
       refreshVisibility();
     });
+  });
+  document.querySelectorAll('.ckbox').forEach(cb=>{
+    cb.addEventListener('change',()=>{ window.toggleCheck(cb.dataset.e); });
   });
 }
 
@@ -174,6 +197,13 @@ function refreshVisibility(){
     const rem = p==='' ? DATA.members.filter(m=>!checked.has(m.e)).length
                         : DATA.members.filter(m=>m.person===p && !checked.has(m.e)).length;
     el.querySelector('.cnt2').textContent = '剩 '+rem+'/'+tot+' 家';
+  });
+  // 同步展开清单里的机构勾选状态
+  document.querySelectorAll('.ckbox').forEach(cb=>{
+    const e = cb.dataset.e;
+    cb.checked = checked.has(e);
+    const it = cb.closest('.iitem');
+    if (it) it.classList.toggle('done', checked.has(e));
   });
 }
 window.toggleCheck = function(e){
