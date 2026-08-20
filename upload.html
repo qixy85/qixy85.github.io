@@ -33,7 +33,7 @@
 <body>
 <div class="wrap">
   <h1>图片打包下载</h1>
-  <div class="sub">从手机/电脑选择多张图片，打包成一个 ZIP 压缩包下载（图片仅在本机处理，不会上传）</div>
+  <div class="sub">从手机/电脑选择多张图片，打包成一个 ZIP 下载。<b>原图高清直存、不压缩画质</b>（图片仅在本机处理，不会上传）</div>
 
   <div id="drop">
     <div class="big">📷</div>
@@ -111,7 +111,7 @@ zipBtn.addEventListener('click',async ()=>{
       used[name] = 1;
       zip.file(name, data);
     }
-    const blob = await zip.generateAsync({type:'blob'}, (meta)=> { prog.textContent = '正在压缩… '+Math.round(meta.percent)+'%'; });
+    const blob = await zip.generateAsync({type:'blob', compression:'STORE'}, (meta)=> { prog.textContent = '正在写入… '+Math.round(meta.percent)+'%'; });
     const a = document.createElement('a');
     const nm = (zipName.value.trim() || '图片打包') + '.zip';
     a.href = URL.createObjectURL(blob);
