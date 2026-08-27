@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>视频播放</title>
+<style>
+ html,body{margin:0;padding:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#0f1115;color:#e6e6e6}
+ .wrap{max-width:680px;margin:0 auto;padding:20px 16px 60px}
+ h1{font-size:20px;margin:8px 0 4px;color:#fff}
+ .sub{color:#888;font-size:13px;margin-bottom:16px}
+ #list{list-style:none;margin:0;padding:0}
+ #list li{background:#1a1d24;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s}
+ #list li:hover{background:#22262f}
+ #list .play{flex:none;width:34px;height:34px;border-radius:50%;background:#4c9aff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+ #list .nm{flex:1;min-width:0;font-size:14px;word-break:break-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ #list .sz{flex:none;color:#999;font-size:12px}
+ #list .tag{flex:none;font-size:10px;padding:2px 6px;border-radius:4px;background:#2a2e37;color:#9aa0aa}
+ #list .tag.cdn{background:#1e3a5f;color:#6cb3ff}
+ #list .empty{color:#888;text-align:center;padding:40px 0;font-size:14px}
+ #playerCard{display:none;background:#1a1d24;border-radius:12px;padding:14px;margin-bottom:16px}
+ #playerCard.show{display:block}
+ #playerCard .cur{font-size:13px;color:#ccc;margin-bottom:10px;word-break:break-all}
+ video{width:100%;border-radius:8px;background:#000}
+ #hint{background:#1a1d24;border-radius:10px;padding:14px;margin-top:16px;font-size:12px;color:#9aa0aa;line-height:1.8}
+ #hint b{color:#ccc}
+ #hint code{background:#2a2e37;padding:2px 6px;border-radius:4px;font-size:11px;color:#6cb3ff}
+ .loading{text-align:center;color:#888;padding:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>视频播放</h1>
+  <div class="sub">点击视频开始播放</div>
+
+  <div id="playerCard">
+    <div class="cur" id="curName"></div>
+    <video id="player" controls playsinline></video>
+  </div>
+
+  <ul id="list"><li class="loading">加载中...</li></ul>
+
+  <div id="hint">
+    <b>如何添加视频：</b><br>
+    1. 将视频文件放入仓库 <code>videos/</code> 目录<br>
+    2. <code>git add videos/文件名.mp4</code> → <code>git commit -m "add video"</code> → <code>git push</code><br>
+    3. 刷新本页面即可看到并播放<br>
+    <br>
+    <b>限制：</b>单个视频 ≤100MB（GitHub 仓库限制）；≤20MB 的视频可流畅拖动进度条，>20MB 的播放时可能无法拖动进度
+  </div>
+</div>
+
+<script>
+const REPO = 'qixy85/qixy85.github.io';
+const BRANCH = 'main';
+const CDN_LIMIT = 20 * 1024 * 1024;
+
+const listEl = document.getElementById('list');
+const player = document.getElementById('player');
+const playerCard = document.getElementById('playerCard');
+const curName = document.getElementById('curName');
+
+function fmtSize(n) {
+  if (n > 1e9) return (n / 1e9).toFixed(1) + ' GB';
+  if (n > 1e6) return (n / 1e6).toFixed(1) + ' MB';
+  if (n > 1e3) return (n / 1e3).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function videoUrl(name, size) {
+  const enc = encodeURIComponent(name);
+  if (size <= CDN_LIMIT) {
+    return 'https://cdn.jsdelivr.net/gh/' + REPO + '@' + BRANCH + '/videos/' + enc;
+  }
+  return 'https://raw.githubusercontent.com/' + REPO + '/' + BRANCH + '/videos/' + enc;
+}
+
+function isVideo(name) {
+  return /\.(mp4|m4v|mov|webm|ogv)$/i.test(name);
+}
+
+function play(name, size) {
+  curName.textContent = name;
+  player.src = videoUrl(name, size);
+  playerCard.classList.add('show');
+  player.play().catch(function(){});
+  playerCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+function load() {
+  const cached = localStorage.getItem('videoList');
+  const cachedAt = +localStorage.getItem('videoListAt') || 0;
+  if (cached && Date.now() - cachedAt < 5 * 60 * 1000) {
+    render(JSON.parse(cached));
+    return;
+  }
+  fetch('https://api.github.com/repos/' + REPO + '/contents/videos?ref=' + BRANCH)
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function (files) {
+      const videos = files.filter(function (f) { return f.type === 'file' && isVideo(f.name); });
+      localStorage.setItem('videoList', JSON.stringify(videos));
+      localStorage.setItem('videoListAt', String(Date.now()));
+      render(videos);
+    })
+    .catch(function () {
+      if (cached) { render(JSON.parse(cached)); return; }
+      listEl.innerHTML = '<li class="empty">加载失败，请检查网络后刷新</li>';
+    });
+}
+
+function render(videos) {
+  listEl.innerHTML = '';
+  if (!videos.length) {
+    listEl.innerHTML = '<li class="empty">暂无视频，请先用 git 上传视频到仓库 videos/ 目录</li>';
+    return;
+  }
+  videos.forEach(function (v) {
+    const li = document.createElement('li');
+    const playBtn = document.createElement('div');
+    playBtn.className = 'play'; playBtn.textContent = '▶';
+    const nm = document.createElement('span');
+    nm.className = 'nm'; nm.textContent = v.name; nm.title = v.name;
+    const sz = document.createElement('span');
+    sz.className = 'sz'; sz.textContent = fmtSize(v.size);
+    const tag = document.createElement('span');
+    tag.className = 'tag' + (v.size <= CDN_LIMIT ? ' cdn' : '');
+    tag.textContent = v.size <= CDN_LIMIT ? '流畅' : '大文件';
+    li.appendChild(playBtn); li.appendChild(nm); li.appendChild(sz); li.appendChild(tag);
+    li.onclick = function () { play(v.name, v.size); };
+    listEl.appendChild(li);
+  });
+}
+
+load();
+</script>
+</body>
+</html>
