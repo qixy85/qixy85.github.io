@@ -55,6 +55,39 @@
   };
 })();
 
+
+
+// ===== 云同步(自动跨设备) =====
+const CLOUD = {ns:'ckyq1788141037', path:'ck', key:'8b07290847c248e52aba339970bbf41c919aa028f4a4a5917ecb81d61c4432cd'};
+let uploadTimer = null;
+window.__uploadCK = function(){
+  clearTimeout(uploadTimer);
+  uploadTimer = setTimeout(function(){
+    fetch('https://mantledb.sh/v2/'+CLOUD.ns+'/'+CLOUD.path, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','X-Mantle-Key':CLOUD.key},
+      body: JSON.stringify({codes:[...checked], ver:CK_VER})
+    }).catch(function(){});
+  }, 1200);
+};
+(function(){
+  var orig = saveChecked;
+  saveChecked = function(){ orig(); window.__uploadCK(); };
+})();
+fetch('https://mantledb.sh/v2/'+CLOUD.ns+'/'+CLOUD.path)
+ .then(function(r){ return r.json().catch(function(){ return null; }); })
+ .then(function(d){
+   if (d && Array.isArray(d.codes) && d.ver === CK_VER) {
+     checked = new Set(d.codes);
+     saveChecked();
+     refreshVisibility();
+     if (typeof buildLegend === 'function') buildLegend();
+   } else {
+     window.__uploadCK();
+   }
+ })
+ .catch(function(){ window.__uploadCK(); });
+
 </script>
 <style>
  html,body{margin:0;height:100%;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
