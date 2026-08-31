@@ -5,7 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>园区定点机构地图</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js">
+
+// ===== 导出/导入已检查(跨设备同步) =====
+(function(){
+  var eb=document.createElement('button'); eb.textContent='导出已检查'; eb.className='clearbtn'; eb.style.cssText='margin-top:4px';
+  var ib=document.createElement('button'); ib.textContent='导入已检查'; ib.className='clearbtn'; ib.style.cssText='margin-top:4px';
+  var ctl=document.getElementById('checkctl');
+  if(ctl){ ctl.appendChild(eb); ctl.appendChild(ib); }
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,.35);z-index:3000;display:none;align-items:center;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:12px;padding:16px;max-width:90vw;width:480px;box-sizing:border-box">'+
+    '<div style="font-size:15px;font-weight:bold;margin-bottom:8px">同步已检查名单（共 <span id="synccnt">0</span> 家）</div>'+
+    '<textarea id="syncText" rows="10" style="width:100%;box-sizing:border-box;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:8px" placeholder="国家编码，每行一个"></textarea>'+
+    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+    '<button id="syncCopy" style="flex:1;padding:8px;border:none;border-radius:6px;background:#eee;cursor:pointer;font-size:13px">复制名单</button>'+
+    '<button id="syncImport" style="flex:1;padding:8px;border:none;border-radius:6px;background:#4363d8;color:#fff;cursor:pointer;font-size:13px">导入(替换勾选)</button>'+
+    '<button id="syncMerge" style="flex:1;padding:8px;border:none;border-radius:6px;background:#ff9800;color:#fff;cursor:pointer;font-size:13px">合并追加</button>'+
+    '<button id="syncClose" style="flex:1;padding:8px;border:none;border-radius:6px;background:#eee;cursor:pointer;font-size:13px">关闭</button></div></div>';
+  document.body.appendChild(ov);
+  function openPanel(mode){
+    var c=document.getElementById('synccnt'); if(c) c.textContent=checked.size;
+    var t=document.getElementById('syncText');
+    if(mode==='export' && t) t.value=[...checked].join('\n');
+    ov.style.display='flex';
+  }
+  eb.onclick=function(){ openPanel('export'); };
+  ib.onclick=function(){ openPanel('import'); };
+  document.getElementById('syncClose').onclick=function(){ ov.style.display='none'; };
+  document.getElementById('syncCopy').onclick=function(){
+    var t=document.getElementById('syncText');
+    if(!t.value) return;
+    t.select(); t.setSelectionRange(0,999999);
+    try{ navigator.clipboard.writeText(t.value); }catch(e){ document.execCommand('copy'); }
+  };
+  function parseCodes(txt){
+    var s=new Set();
+    (txt.match(/[PH]\d+/g)||[]).forEach(function(c){ s.add(c); });
+    return s;
+  }
+  document.getElementById('syncImport').onclick=function(){
+    checked=parseCodes(document.getElementById('syncText').value);
+    saveChecked(); refreshVisibility(); ov.style.display='none';
+  };
+  document.getElementById('syncMerge').onclick=function(){
+    var s=parseCodes(document.getElementById('syncText').value);
+    s.forEach(function(c){ checked.add(c); });
+    saveChecked(); refreshVisibility(); ov.style.display='none';
+  };
+})();
+
+</script>
 <style>
  html,body{margin:0;height:100%;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
  #map{position:absolute;top:0;left:0;right:0;bottom:0}
