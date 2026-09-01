@@ -113,6 +113,58 @@ function loadImg(url){
     im.src = url;
   });
 }
+function bytesOf(dataUrl){
+  const bin = atob(dataUrl.split(',')[1]);
+  const b = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) b[i]=bin.charCodeAt(i);
+  return b;
+}
+// 解析 JPEG EXIF 方向(0x0112)，返回 1-8；非1说明需要旋转/翻转
+function parseJpegOrientation(dataUrl){
+  const bytes = bytesOf(dataUrl);
+  if (bytes[0]!==0xFF || bytes[1]!==0xD8) return 1;
+  let off = 2;
+  while (off+4 < bytes.length){
+    if (bytes[off]!==0xFF){ off++; continue; }
+    const marker = bytes[off+1];
+    if (marker===0xDA || marker===0xD9) break;
+    if (marker>=0xD0 && marker<=0xD7){ off+=2; continue; }
+    const len = (bytes[off+2]<<8)|bytes[off+3];
+    if (len<2 || off+2+len>bytes.length) break;
+    if (marker===0xE1){
+      const e = bytes.slice(off+4, off+2+len);
+      if (e[0]===0x45&&e[1]===0x78&&e[2]===0x69&&e[3]===0x66&&e[4]===0&&e[5]===0){
+        const t = e.slice(6);
+        const le = (t[0]===0x49&&t[1]===0x49);
+        if (!((le)||(t[0]===0x4D&&t[1]===0x4D))) return 1;
+        const u16=(p)=> le ? (t[p]|(t[p+1]<<8)) : ((t[p]<<8)|t[p+1]);
+        const u32=(p)=> le ? (t[p]|(t[p+1]<<8)|(t[p+2]<<16)|(t[p+3]<<24)) : ((t[p]<<24)|(t[p+1]<<16)|(t[p+2]<<8)|t[p+3]);
+        const ifd0 = u32(4);
+        if (!ifd0 || ifd0+2>t.length) return 1;
+        const n = u16(ifd0);
+        for (let i=0;i<n;i++){
+          const p = ifd0+2+i*12;
+          if (p+12>t.length) break;
+          if (u16(p)===0x0112){
+            const val = u16(p+8);
+            return (val>=1&&val<=8) ? val : 1;
+          }
+        }
+        return 1;
+      }
+    }
+    off += 2+len;
+  }
+  return 1;
+}
+// 有旋转/翻转方向的 JPEG：用 canvas 固定方向重绘(浏览器已转正)，否则PDF查看器不认EXIF会拉伸
+function fixOrientation(dataUrl, img, w, h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 1.0);
+}
 
 pdfBtn.addEventListener('click', async ()=>{
   if (!files.length) return;
@@ -125,13 +177,17 @@ pdfBtn.addEventListener('click', async ()=>{
     for (let i=0; i<files.length; i++){
       prog.textContent = '正在处理第 '+(i+1)+'/'+files.length+' 张…';
       const f = files[i].file;
-      const dataUrl = await readAsDataURL(f);
+      let dataUrl = await readAsDataURL(f);
       const img = await loadImg(dataUrl);
       const w = img.naturalWidth || img.width;
       const h = img.naturalHeight || img.height;
+      const isPng = dataUrl.indexOf('data:image/png') === 0;
+      // EXIF 有旋转/翻转方向的 JPEG → 用已转正的 canvas 重绘，避免 PDF 拉伸
+      if (!isPng && parseJpegOrientation(dataUrl) !== 1){
+        dataUrl = fixOrientation(dataUrl, img, w, h);
+      }
       // 页面=图片原像素尺寸+边框，图片1:1放置，比例不变
       const pw = w + mg*2, ph = h + mg*2;
-      const isPng = dataUrl.indexOf('data:image/png') === 0;
       if (!doc){
         doc = new jsPDF({orientation: pw>ph?'l':'p', unit:'px', format:[pw,ph], compress:true});
       } else {
