@@ -197,7 +197,10 @@ function mkIcon(m, g){
 function groupListHtml(g){
   let h='<div style="max-height:45vh;overflow:auto;min-width:250px"><b>'+g.type+'第'+g.gi+'组 · '+g.size+'家</b>'+(g.area?(' · '+g.area):'');
   g.members.forEach(m=>{
-    h+='<div style="margin-top:5px;padding-top:5px;border-top:1px dotted #ccc"><b>#'+m.n+'</b> '+m.name+'<br>'+
+    const md = checked.has(m.c);
+    h+='<div style="margin-top:5px;padding-top:5px;border-top:1px dotted #ccc">'+
+      '<span style="color:'+(md?'#4caf50':'#999')+';font-size:11px">'+(md?'✓ 已检查':'○ 未检查')+'</span> '+
+      '<b>#'+m.n+'</b> '+(md?'<s style="color:#999">'+m.name+'</s>':m.name)+'<br>'+
       '<span style="color:#666;font-size:11px">'+m.addr+'</span></div>';
   });
   return h+'</div>';
@@ -207,10 +210,25 @@ function popupHtml(g, m){
   return '<b>'+g.type+'第'+g.gi+'组 #'+m.n+' · '+m.name+'</b><br>'+
     '<span style="color:#444">定点单位编号 <b>'+m.bno+'</b> · 国家代码 '+m.c+'</span><br>'+
     m.addr+
+    (m.sameAddr ? '<div style="color:#c00;font-size:11px">同址共'+m.sameAddr+'家，已错开显示</div>' : '')+
     '<br><button class="ckbtn '+(done?'done':'not')+'" id="ckbtn-'+m.c+'" onclick="toggleCheck(\''+m.c+'\')">'+
     (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>'+
     '<hr>'+groupListHtml(g);
 }
+// ===== 同址(同坐标)机构错开显示 =====
+(function(){
+  const cnt = {}, idx = {};
+  allGroups.forEach(g=>g.members.forEach(m=>{ const k=m.lat.toFixed(4)+','+m.lng.toFixed(4); cnt[k]=(cnt[k]||0)+1; }));
+  allGroups.forEach(g=>g.members.forEach(m=>{
+    const k=m.lat.toFixed(4)+','+m.lng.toFixed(4);
+    if(cnt[k]>1){
+      const i = idx[k]=(idx[k]||0)+1;
+      const ang=(i-1)/cnt[k]*2*Math.PI, r=0.00016;
+      m.lat += r*Math.cos(ang); m.lng += r*Math.sin(ang);
+      m.sameAddr = cnt[k];
+    }
+  }));
+})();
 allGroups.forEach(g=>{
   g.members.forEach(m=>{
     const mk = L.marker([m.lat,m.lng], {icon:mkIcon(m,g)}).addTo(map).bindPopup(popupHtml(g,m));
@@ -278,6 +296,8 @@ function refreshVisibility(){
 window.toggleCheck=function(c){
   if(checked.has(c)) checked.delete(c); else checked.add(c);
   saveChecked(); refreshVisibility();
+  const o=byCode[c];
+  if(o) o.mk.setPopupContent(popupHtml(o.g,o.m));
 };
 document.getElementById('hidebtn').addEventListener('click',()=>{ hideChecked=!hideChecked; refreshVisibility(); });
 document.getElementById('clearbtn').addEventListener('click',()=>{ checked.clear(); saveChecked(); refreshVisibility(); });
