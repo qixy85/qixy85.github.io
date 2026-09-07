@@ -346,8 +346,8 @@ fetch('https://mantledb.sh/v2/'+CLOUD.ns+'/'+CLOUD.path)
    if (d && Array.isArray(d.codes) && d.ver === CK_VER) {
      checked = new Set(d.codes);
      saveChecked();
-     refreshVisibility();
      if (typeof buildLegend === 'function') buildLegend();
+     refreshVisibility();
    } else {
      window.__uploadCK();
    }
