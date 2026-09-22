@@ -1223,13 +1223,21 @@ async function applyRows(rows){
     const a = String(pickCol(row, ['地址','定点单位地址'])||'').trim();
     const p = String(pickCol(row, ['负责人','人员','责任人'])||'').trim();
     const t = String(pickCol(row, ['最后检查日期','检查时间','最后检查','日期'])||'').trim();
+    const ckRaw = String(pickCol(row, ['是否检查','是否已检查','检查状态'])||'').trim();
     if (!e) continue;
     const idx = data.findIndex(x=>x.e===e);
     let act = op || (idx>=0 ? '修改' : '新增');
     if (act.indexOf('删')>=0){
-      if (idx>=0){ const nm=data[idx].n; data.splice(idx,1); del++; log('✓ 删除 '+e+' '+nm,'ok'); }
+      if (idx>=0){ const nm=data[idx].n; data.splice(idx,1); del++; checked.delete(e); log('✓ 删除 '+e+' '+nm,'ok'); }
       else log('✗ 删除失败(编码不存在): '+e,'err');
       continue;
+    }
+    // 是否检查:有值时才更新(是/已检查/✓/1 → 勾选;否/未检查/×/0 → 取消)
+    if (ckRaw){
+      const yes = /^(是|已检查|已查|已|✓|✔|v|y|yes|true|1)$/i.test(ckRaw);
+      const no  = /^(否|未检查|未查|未|×|x|✗|n|no|false|0|-)$/i.test(ckRaw);
+      if (yes){ checked.add(e); log('　 ✓ '+e+' 标记为已检查','ok'); }
+      else if (no){ checked.delete(e); log('　 ○ '+e+' 标记为未检查','warnc'); }
     }
     const tLat = parseFloat(pickCol(row, ['纬度','lat']));
     const tLng = parseFloat(pickCol(row, ['经度','lng','lon']));
@@ -1261,6 +1269,7 @@ async function applyRows(rows){
     }
   }
   log('—— 完成: 新增'+add+' 删除'+del+' 修改'+mod+' 失败'+fail+' ——','warnc');
+  saveChecked();
   render();
 }
 document.getElementById('upBtn').onclick = ()=>{
@@ -1282,10 +1291,10 @@ document.getElementById('fileInput').addEventListener('change', async function()
 document.getElementById('tplBtn').onclick = ()=>{
   if (typeof XLSX === 'undefined'){ alert('表格组件还在加载,请稍候'); return; }
   const rows = [
-    ['国家编码','操作','园区代码','名称','地址','负责人','最后检查日期'],
-    ['H32054002738','新增','2476','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦','2025-09-30'],
-    ['H32054000000','修改','','机构新名称','苏州工业园区XX路1号','徐心悦',''],
-    ['H32054000001','删除','','','','','']
+    ['操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查'],
+    ['新增','2476','H32054002738','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦','2025-09-30','是'],
+    ['修改','','H32054000000','机构新名称','苏州工业园区XX路1号','徐心悦','','否'],
+    ['删除','','H32054000001','','','','','']
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -1297,8 +1306,8 @@ document.getElementById('clearAllBtn').onclick = ()=>{
   data = []; checked.clear(); saveChecked(); log('已清空全部机构','warnc'); render();
 };
 document.getElementById('expBtn').onclick = ()=>{
-  const head = ['国家编码','园区代码','名称','地址','负责人','最后检查日期','纬度','经度'];
-  const lines = [head.join(',')].concat(data.map(m=>[m.e,m.c,m.n,m.a,m.p,m.t,m.lat,m.lng]
+  const head = ['操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查','纬度','经度'];
+  const lines = [head.join(',')].concat(data.map(m=>['',m.c,m.e,m.n,m.a,m.p,m.t,(checked.has(m.e)?'是':'否'),m.lat,m.lng]
     .map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')));
   const blob = new Blob(['\ufeff'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
