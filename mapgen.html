@@ -967,7 +967,13 @@ function refreshVisibility(){
   document.querySelectorAll('#legend .ckbox').forEach(cb=>{
     cb.checked = checked.has(cb.dataset.e);
     const it = cb.closest('.iitem');
-    if (it) it.classList.toggle('done', checked.has(cb.dataset.e));
+    if (it){
+      const done = checked.has(cb.dataset.e);
+      it.classList.toggle('done', done);
+      let st = it.querySelector('.istat');
+      if (done && !st){ st = document.createElement('span'); st.className='istat'; st.textContent='✓已检查'; it.appendChild(st); }
+      if (!done && st){ st.parentNode.removeChild(st); }
+    }
   });
 }
 window.toggleCheck = function(e){
