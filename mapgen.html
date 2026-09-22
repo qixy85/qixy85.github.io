@@ -967,7 +967,7 @@ function popupHtml(m){
     (m.a||'')+'<br>负责人: <b>'+(m.p||'—')+'</b><br>最后检查日期: <b>'+(m.t||'无')+'</b>'+
     (m.sameAddr ? '<div style="color:#c00;font-size:11px">同址共'+m.sameAddr+'家，已错开显示</div>' : '')+
     '<br><button class="ckbtn '+(done?'done':'not')+'" onclick="toggleCheck(\''+m.e+'\')">'+
-    (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>';
+    (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>'+
     '<button class="ckbtn not" style="margin-top:4px" onclick="relocate(\''+m.e+'\')">重新定位(按地址)</button>';
 }
 function render(){
