@@ -802,7 +802,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     <div class="fld"><label>机构名称</label><input id="f_n" placeholder="如 苏州工业园区XX诊所"></div>
     <div class="fld"><label>地址</label><input id="f_a" placeholder="用于自动定位，如 XX路1号"></div>
     <div class="fld"><label>负责人</label><input id="f_p" placeholder="如 徐心悦"></div>
-    <div class="fld"><label>最后检查日期</label><input id="f_t" placeholder="如 2025-09-30（可留空）"></div>
+    <div class="fld"><label>最后检查日期</label><input id="f_t" type="date"></div>
+    <div class="fld"><label>纬度(可选)</label><input id="f_lat" placeholder="手动坐标，填了就优先用它"></div>
+    <div class="fld"><label>经度(可选)</label><input id="f_lng" placeholder="手动坐标，填了就优先用它"></div>
     <div class="mrow">
       <button id="addConfirm">定位并新增</button>
       <button id="delBtn" class="warn">按编码删除</button>
@@ -813,6 +815,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <script>
 const KEY = '71ee57c7d60c68ac00f29c11b251a595';
 let data = [];                       // 初始为空
+try { const _s = localStorage.getItem('mg_data_v1'); if (_s) data = JSON.parse(_s) || []; } catch(e){ data = []; }
+function saveData(){ try{ localStorage.setItem('mg_data_v1', JSON.stringify(data)); }catch(e){} }
 let map = null;
 const byE = {};                      // code -> {mk, m}
 let layerGroup = null;
@@ -851,8 +855,9 @@ async function geocodeInst(name, addr){
           return (core && pn.indexOf(core)>=0) || pn===nm;
         });
         if (cand.length){
-          const ll = (cand[0].location||'').split(',');
-          if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'POI名称'};
+          const c0 = cand[0];
+          const ll = (c0.location||'').split(',');
+          if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'POI名称', faddr:(c0.name||'')+(c0.address?(' / '+c0.address):'')};
         }
       }
     }
@@ -867,7 +872,7 @@ async function geocodeInst(name, addr){
                   || gs.find(g=>(g.formatted_address||'').indexOf('工业园区')>=0)
                   || gs[0];
         const ll = (good.location||'').split(',');
-        if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'地址门址'};
+        if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'地址'+(good.level||''), faddr:good.formatted_address||''};
       }
     }
   } catch(e){}
@@ -916,6 +921,7 @@ function render(){
   });
   buildLegend();
   refreshVisibility();
+  saveData();
 }
 function buildLegend(){
   const el = document.getElementById('legend');
@@ -1046,16 +1052,20 @@ document.getElementById('addConfirm').onclick = async ()=>{
   const a = document.getElementById('f_a').value.trim();
   const p = document.getElementById('f_p').value.trim();
   const t = document.getElementById('f_t').value.trim();
+  const mLat = parseFloat(document.getElementById('f_lat').value);
+  const mLng = parseFloat(document.getElementById('f_lng').value);
   if (!e || !n || !a){ alert('国家编码、名称、地址必填'); return; }
   const btn = document.getElementById('addConfirm'); btn.disabled = true;
-  log('定位中: '+n+' …');
-  const geo = await geocodeInst(n, a);
+  let geo = null;
+  if (!isNaN(mLat) && !isNaN(mLng)){ geo = {lat:mLat, lng:mLng, src:'手动坐标', faddr:'手动填写'}; }
+  else { log('定位中: '+n+' …'); geo = await geocodeInst(n, a); }
   btn.disabled = false;
-  if (!geo){ log('✗ 定位失败: '+n+' (可尝试修改地址后重试)','err'); return; }
+  if (!geo){ log('✗ 定位失败: '+n+' (可修改地址重试,或在弹框里手动填纬度/经度)','err'); return; }
   const i = data.findIndex(x=>x.e===e);
   if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:t||data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
   else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
-  ['f_e','f_c','f_n','f_a','f_p','f_t'].forEach(id=>document.getElementById(id).value='');
+  log('　 定位到: '+(geo.faddr||'')+' → '+(+geo.lat).toFixed(5)+','+(+geo.lng).toFixed(5), 'warnc');
+  ['f_e','f_c','f_n','f_a','f_p','f_t','f_lat','f_lng'].forEach(id=>document.getElementById(id).value='');
   addModal.style.display='none';
   render();
   if (data.length===1) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.3));
@@ -1109,11 +1119,16 @@ async function applyRows(rows){
       else log('✗ 删除失败(编码不存在): '+e,'err');
       continue;
     }
+    const tLat = parseFloat(pickCol(row, ['纬度','lat']));
+    const tLng = parseFloat(pickCol(row, ['经度','lng','lon']));
     let geo = null;
-    const needGeo = (act.indexOf('新')>=0) || (act.indexOf('修')>=0 && a && a !== (idx>=0?data[idx].a:''));
-    if (needGeo){
-      geo = await geocodeInst(n || (idx>=0?data[idx].n:''), a || (idx>=0?data[idx].a:''));
-      await new Promise(r=>setTimeout(r,150));
+    if (!isNaN(tLat) && !isNaN(tLng)){ geo = {lat:tLat, lng:tLng, src:'表格坐标', faddr:'表格提供'}; }
+    else {
+      const needGeo = (act.indexOf('新')>=0) || (act.indexOf('修')>=0 && a && a !== (idx>=0?data[idx].a:''));
+      if (needGeo){
+        geo = await geocodeInst(n || (idx>=0?data[idx].n:''), a || (idx>=0?data[idx].a:''));
+        await new Promise(r=>setTimeout(r,150));
+      }
     }
     if (act.indexOf('新')>=0){
       if (!geo){ fail++; log('✗ 新增定位失败,已跳过: '+e+' '+n,'err'); continue; }
@@ -1190,6 +1205,7 @@ map = L.map('map').setView([31.32,120.72], 12);
 L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
   {subdomains:['1','2','3','4'], maxZoom:18, detectRetina:true, attribution:'高德'}).addTo(map);
 render();
+if (data.length) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.1));
 </script>
 </body>
 </html>
