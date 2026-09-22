@@ -37,7 +37,7 @@
  #panel .cnt2{color:#555;margin-left:4px;white-space:nowrap;font-size:11px}
  #panel .ilist{max-height:220px;overflow:auto;margin-top:3px;border-top:1px solid #eee}
  #panel .iitem{display:flex;align-items:center;gap:6px;padding:3px 2px;border-top:1px solid #f0f0f0;font-size:12px}
- #panel .iname{flex:1;word-break:break-all}
+ #panel .iname{flex:1;word-break:break-all;cursor:pointer}
  #panel .istat{color:#4caf50;font-size:11px;flex:none}
  #panel .iitem.done .iname{color:#999;text-decoration:line-through}
  #togglePanel{position:absolute;top:10px;left:10px;z-index:1001;display:none;padding:10px 14px;border:none;border-radius:8px;
@@ -169,7 +169,7 @@ function buildLegend(){
   document.getElementById('legend').innerHTML = html;
   document.querySelectorAll('.pers[data-p]').forEach(el=>{
     el.addEventListener('click',(e)=>{
-      if (e.target.closest('.pck')||e.target.closest('.ckbox')) return;
+      if (e.target.closest('.pck')||e.target.closest('.ckbox')||e.target.closest('.iitem')) return;
       const il = el.querySelector('.ilist');
       if (il) {
         // 点名字/箭头 = 展开查看该负责人机构清单
@@ -192,6 +192,18 @@ function buildLegend(){
   });
   document.querySelectorAll('.ckbox').forEach(cb=>{
     cb.addEventListener('change',()=>{ window.toggleCheck(cb.dataset.e); });
+  });
+  // 点机构名 → 地图定位并弹窗
+  document.querySelectorAll('.iitem').forEach(el=>{
+    el.addEventListener('click',(e)=>{
+      if (e.target.closest('.ckbox')) return;
+      e.stopPropagation();
+      const cbx = el.querySelector('.ckbox');
+      const o = cbx ? byE[cbx.dataset.e] : null;
+      if (!o) return;
+      map.flyTo([o.m.lat, o.m.lng], Math.max(map.getZoom(),16));
+      setTimeout(function(){ o.mk.openPopup(); }, 500);
+    });
   });
 }
 
