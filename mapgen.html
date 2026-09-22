@@ -802,7 +802,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     <div class="fld"><label>机构名称</label><input id="f_n" placeholder="如 苏州工业园区XX诊所"></div>
     <div class="fld"><label>地址</label><input id="f_a" placeholder="用于自动定位，如 XX路1号"></div>
     <div class="fld"><label>负责人</label><input id="f_p" placeholder="如 徐心悦"></div>
-    <div class="fld"><label>最后检查日期</label><input id="f_t" type="date"></div>
+    <div class="fld"><label>最后检查日期</label><input id="f_t" type="date" onclick="try{this.showPicker&&this.showPicker();}catch(e){}"></div>
     <div class="fld"><label>纬度(可选)</label><input id="f_lat" placeholder="手动坐标，填了就优先用它"></div>
     <div class="fld"><label>经度(可选)</label><input id="f_lng" placeholder="手动坐标，填了就优先用它"></div>
     <div class="mrow">
@@ -920,7 +920,7 @@ function acceptGeo(g, toks){
   if (!toks.length) return true;
   return toks.some(t=> (g.faddr||'').indexOf(t)>=0);
 }
-async function geocodeInst(name, addr){
+async function geocodeByAddr(addr){
   const toks = tokensOf(addr);
   // 1) 地址直接定位(按校验规则挑最优)
   let B = null;
@@ -945,15 +945,8 @@ async function geocodeInst(name, addr){
       }
     }
   }
-  // 3) 机构名补充/精修
-  const A = await poiName(name);
-  if (A && B){
-    if (distKm(A,B) <= 2) return {lat:A.lat, lng:A.lng, src:'名称精修', faddr:A.faddr+' (与地址一致)'};
-    return {lat:B.lat, lng:B.lng, src:B.src, faddr:B.faddr, approx:B.approx, conflict:A.faddr};
-  }
-  if (B) return B;
-  if (A) return {lat:A.lat, lng:A.lng, src:'名称定位(地址未匹配)', faddr:A.faddr, approx:true};
-  return null;
+  // 仅按地址定位
+  return B;
 }
 
 // ===== 标记与面板 =====
@@ -975,6 +968,7 @@ function popupHtml(m){
     (m.sameAddr ? '<div style="color:#c00;font-size:11px">同址共'+m.sameAddr+'家，已错开显示</div>' : '')+
     '<br><button class="ckbtn '+(done?'done':'not')+'" onclick="toggleCheck(\''+m.e+'\')">'+
     (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>';
+    '<button class="ckbtn not" style="margin-top:4px" onclick="relocate(\''+m.e+'\')">重新定位(按地址)</button>';
 }
 function render(){
   // 数量显示在右上角已检查统计处
@@ -1086,6 +1080,22 @@ function refreshVisibility(){
     }
   });
 }
+window.relocate = async function(e){
+  const i = data.findIndex(x=>x.e===e);
+  if (i<0) return;
+  const cur = data[i];
+  const addr = prompt('重新定位：可修改地址后确定（按地址重新定位）', cur.a||'');
+  if (addr===null) return;
+  log('重新定位: '+(cur.n||e)+' ← '+addr);
+  const geo = await geocodeByAddr(addr.trim());
+  if (!geo){ log('✗ 定位失败：'+addr+'（可在弹框手动填纬度/经度）','err'); return; }
+  cur.a = addr.trim();
+  cur.lat = geo.lat; cur.lng = geo.lng;
+  log('✓ 新位置['+geo.src+']: '+(geo.faddr||'')+' → '+(+geo.lat).toFixed(5)+','+(+geo.lng).toFixed(5),'ok');
+  if (geo.approx) log('　 ⚠ 近似定位,请核对','err');
+  render();
+  setTimeout(()=>{ if (byE[e]) byE[e].mk.openPopup(); }, 300);
+};
 window.toggleCheck = function(e){
   if (checked.has(e)) checked.delete(e); else checked.add(e);
   saveChecked(); refreshVisibility();
@@ -1135,7 +1145,7 @@ document.getElementById('addConfirm').onclick = async ()=>{
   const btn = document.getElementById('addConfirm'); btn.disabled = true;
   let geo = null;
   if (!isNaN(mLat) && !isNaN(mLng)){ geo = {lat:mLat, lng:mLng, src:'手动坐标', faddr:'手动填写'}; }
-  else { log('定位中: '+n+' …'); geo = await geocodeInst(n, a); }
+  else { log('定位中(按地址): '+a+' …'); geo = await geocodeByAddr(a); }
   btn.disabled = false;
   if (!geo){ log('✗ 定位失败: '+n+' (可修改地址重试,或在弹框里手动填纬度/经度)','err'); return; }
   const i = data.findIndex(x=>x.e===e);
@@ -1205,7 +1215,7 @@ async function applyRows(rows){
     else {
       const needGeo = (act.indexOf('新')>=0) || (act.indexOf('修')>=0 && a && a !== (idx>=0?data[idx].a:''));
       if (needGeo){
-        geo = await geocodeInst(n || (idx>=0?data[idx].n:''), a || (idx>=0?data[idx].a:''));
+        geo = await geocodeByAddr(a || (idx>=0?data[idx].a:''));
         await new Promise(r=>setTimeout(r,150));
       }
     }
