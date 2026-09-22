@@ -719,6 +719,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
  #addModal .mbox{background:#fff;border-radius:12px;padding:16px;width:340px;max-width:92vw;box-sizing:border-box;box-shadow:0 6px 24px rgba(0,0,0,.3)}
  #addModal h3{margin:0 0 8px;font-size:16px}
  #addModal input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin:4px 0;font-size:14px}
+ #addModal .fld{display:flex;align-items:center;gap:8px;margin:4px 0}
+ #addModal .fld label{width:86px;flex:none;color:#555;font-size:13px;text-align:right}
+ #addModal .fld input{flex:1;margin:0;width:auto}
  #addModal .mrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
  #addModal .mrow button{flex:1;padding:9px;border:none;border-radius:6px;font-size:14px;cursor:pointer;background:#4363d8;color:#fff}
  #addModal .mrow button.gray{background:#eee;color:#333}
@@ -794,11 +797,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <div id="addModal">
   <div class="mbox">
     <h3>新增机构</h3>
-    <input id="f_e" placeholder="国家编码(如 H32054002738)">
-    <input id="f_c" placeholder="园区代码(如 2476)">
-    <input id="f_n" placeholder="机构名称">
-    <input id="f_a" placeholder="地址(用于自动定位)">
-    <input id="f_p" placeholder="负责人">
+    <div class="fld"><label>国家编码</label><input id="f_e" placeholder="如 H32054002738"></div>
+    <div class="fld"><label>园区代码</label><input id="f_c" placeholder="如 2476"></div>
+    <div class="fld"><label>机构名称</label><input id="f_n" placeholder="如 苏州工业园区XX诊所"></div>
+    <div class="fld"><label>地址</label><input id="f_a" placeholder="用于自动定位，如 XX路1号"></div>
+    <div class="fld"><label>负责人</label><input id="f_p" placeholder="如 徐心悦"></div>
+    <div class="fld"><label>最后检查日期</label><input id="f_t" placeholder="如 2025-09-30（可留空）"></div>
     <div class="mrow">
       <button id="addConfirm">定位并新增</button>
       <button id="delBtn" class="warn">按编码删除</button>
@@ -885,7 +889,7 @@ function popupHtml(m){
   const done = checked.has(m.e);
   return '<b>'+m.n+'</b><br>'+
     '<span style="color:#444">国家编码 '+m.e+' · 园区代码 '+(m.c||'—')+'</span><br>'+
-    (m.a||'')+'<br>负责人: <b>'+(m.p||'—')+'</b><br>检查时间: <b>'+(m.t||'无')+'</b>'+
+    (m.a||'')+'<br>负责人: <b>'+(m.p||'—')+'</b><br>最后检查日期: <b>'+(m.t||'无')+'</b>'+
     (m.sameAddr ? '<div style="color:#c00;font-size:11px">同址共'+m.sameAddr+'家，已错开显示</div>' : '')+
     '<br><button class="ckbtn '+(done?'done':'not')+'" onclick="toggleCheck(\''+m.e+'\')">'+
     (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>';
@@ -1041,6 +1045,7 @@ document.getElementById('addConfirm').onclick = async ()=>{
   const n = document.getElementById('f_n').value.trim();
   const a = document.getElementById('f_a').value.trim();
   const p = document.getElementById('f_p').value.trim();
+  const t = document.getElementById('f_t').value.trim();
   if (!e || !n || !a){ alert('国家编码、名称、地址必填'); return; }
   const btn = document.getElementById('addConfirm'); btn.disabled = true;
   log('定位中: '+n+' …');
@@ -1048,9 +1053,9 @@ document.getElementById('addConfirm').onclick = async ()=>{
   btn.disabled = false;
   if (!geo){ log('✗ 定位失败: '+n+' (可尝试修改地址后重试)','err'); return; }
   const i = data.findIndex(x=>x.e===e);
-  if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
-  else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
-  ['f_e','f_c','f_n','f_a','f_p'].forEach(id=>document.getElementById(id).value='');
+  if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:t||data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
+  else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
+  ['f_e','f_c','f_n','f_a','f_p','f_t'].forEach(id=>document.getElementById(id).value='');
   addModal.style.display='none';
   render();
   if (data.length===1) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.3));
@@ -1095,7 +1100,7 @@ async function applyRows(rows){
     const n = String(pickCol(row, ['名称','机构名称','定点单位名称'])||'').trim();
     const a = String(pickCol(row, ['地址','定点单位地址'])||'').trim();
     const p = String(pickCol(row, ['负责人','人员','责任人'])||'').trim();
-    const t = String(pickCol(row, ['检查时间','最后检查','日期'])||'').trim();
+    const t = String(pickCol(row, ['最后检查日期','检查时间','最后检查','日期'])||'').trim();
     if (!e) continue;
     const idx = data.findIndex(x=>x.e===e);
     let act = op || (idx>=0 ? '修改' : '新增');
@@ -1150,8 +1155,8 @@ document.getElementById('fileInput').addEventListener('change', async function()
 document.getElementById('tplBtn').onclick = ()=>{
   if (typeof XLSX === 'undefined'){ alert('表格组件还在加载,请稍候'); return; }
   const rows = [
-    ['国家编码','操作','园区代码','名称','地址','负责人','检查时间'],
-    ['H32054002738','新增','2476','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦',''],
+    ['国家编码','操作','园区代码','名称','地址','负责人','最后检查日期'],
+    ['H32054002738','新增','2476','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦','2025-09-30'],
     ['H32054000000','修改','','机构新名称','苏州工业园区XX路1号','徐心悦',''],
     ['H32054000001','删除','','','','','']
   ];
@@ -1165,7 +1170,7 @@ document.getElementById('clearAllBtn').onclick = ()=>{
   data = []; checked.clear(); saveChecked(); log('已清空全部机构','warnc'); render();
 };
 document.getElementById('expBtn').onclick = ()=>{
-  const head = ['国家编码','园区代码','名称','地址','负责人','检查时间','纬度','经度'];
+  const head = ['国家编码','园区代码','名称','地址','负责人','最后检查日期','纬度','经度'];
   const lines = [head.join(',')].concat(data.map(m=>[m.e,m.c,m.n,m.a,m.p,m.t,m.lat,m.lng]
     .map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')));
   const blob = new Blob(['\ufeff'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
