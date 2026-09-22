@@ -695,16 +695,34 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <style>
  html,body{margin:0;height:100%;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
  #map{position:absolute;inset:0}
- #side{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(255,255,255,.97);border-radius:10px;
-   padding:12px;box-shadow:0 2px 10px rgba(0,0,0,.25);width:340px;max-height:92vh;overflow:auto;font-size:13px}
- #side h2{margin:0 0 8px;font-size:15px}
- #side .sec{border-top:1px solid #eee;padding-top:8px;margin-top:8px}
- #side button{padding:7px 10px;border:none;border-radius:6px;background:#4363d8;color:#fff;cursor:pointer;font-size:13px;margin:2px 0}
- #side button.gray{background:#eee;color:#333}
- #side button.warn{background:#e67e22}
- #side input,#side select{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #ddd;border-radius:6px;margin:3px 0;font-size:13px}
+ #panel{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(255,255,255,.97);border-radius:10px;
+   padding:12px;box-shadow:0 2px 10px rgba(0,0,0,.25);width:320px;max-height:80vh;overflow:auto;font-size:13px}
+ #panel h2{margin:0 0 8px;font-size:14px}
+ #togglePanel{position:absolute;top:10px;left:10px;z-index:1001;display:none;padding:10px 14px;border:none;border-radius:8px;
+   background:#333;color:#fff;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+ #topright{position:absolute;top:10px;right:10px;z-index:1000;background:rgba(255,255,255,.97);border-radius:10px;
+   padding:12px;box-shadow:0 2px 10px rgba(0,0,0,.25);width:190px;max-height:90vh;overflow:auto;font-size:13px;
+   display:flex;flex-direction:column;gap:5px}
+ #topright .cnt{color:#555}
+ #topright button{padding:7px 8px;border:none;border-radius:6px;font-size:13px;cursor:pointer;background:#4363d8;color:#fff}
+ #topright button.gray{background:#eee;color:#333}
+ #topright button.warn{background:#e67e22;color:#fff}
+ #topright button.addbtn{background:#2e7d32;color:#fff}
+ #topright .hidebtn{background:#ff9800;color:#fff}
+ #topright .hidebtn.off{background:#eee;color:#666}
+ #topright .clearbtn{background:#eee;color:#c00}
+ #topright .sep{border-top:1px solid #eee;margin:2px 0}
  #fileInput{display:none}
- #log{max-height:150px;overflow:auto;font-size:12px;color:#555;background:#fafafa;border-radius:6px;padding:6px;margin-top:6px;white-space:pre-wrap}
+ #logWrap b{font-weight:normal;color:#666;font-size:12px}
+ #log{max-height:130px;overflow:auto;font-size:12px;color:#555;background:#fafafa;border-radius:6px;padding:6px;margin-top:4px;white-space:pre-wrap}
+ #addModal{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:3000;display:none;align-items:center;justify-content:center}
+ #addModal .mbox{background:#fff;border-radius:12px;padding:16px;width:340px;max-width:92vw;box-sizing:border-box;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+ #addModal h3{margin:0 0 8px;font-size:16px}
+ #addModal input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin:4px 0;font-size:14px}
+ #addModal .mrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+ #addModal .mrow button{flex:1;padding:9px;border:none;border-radius:6px;font-size:14px;cursor:pointer;background:#4363d8;color:#fff}
+ #addModal .mrow button.gray{background:#eee;color:#333}
+ #addModal .mrow button.warn{background:#e67e22;color:#fff}
  .ok{color:#2e7d32}.err{color:#c62828}.warnc{color:#e67e22}
  .cnt{color:#555}
  .hidebtn{background:#ff9800 !important;color:#fff}
@@ -738,7 +756,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
  .num-icon div{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
    color:#fff;font-weight:bold;font-size:11px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
  @media (max-width:760px){
-   #side{left:6px;right:6px;width:auto;top:auto;bottom:8px;max-height:48vh}
+   #panel{left:6px;right:6px;width:auto;top:auto;bottom:8px;max-height:48vh;display:none}
+   #togglePanel{display:block}
+   #topright{width:150px;font-size:12px}
    #searchWrap{top:52px;left:6px;right:6px;transform:none;width:auto}
  }
 </style>
@@ -746,43 +766,46 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <body>
 <div id="map"></div>
 <div id="searchWrap"><input id="search" placeholder="搜索：名称 / 国家编码 / 地址 / 负责人"><div id="searchResults"></div></div>
-<div id="side">
-  <h2>地图生成器 <span class="cnt" id="headCnt"></span></h2>
 
-  <div class="sec">
-    <div class="cnt">已检查 <b id="ckcnt">0</b>/<span id="cktotal">0</span> 家</div>
-    <button class="hidebtn" id="hidebtn">隐藏已检查</button>
-    <button class="clearbtn" id="clearbtn">清除已检查</button>
-  </div>
+<!-- 左上:负责人面板(同园区地图) -->
+<button id="togglePanel">☰ 负责人</button>
+<div id="panel">
+  <h2>按负责人筛选</h2>
+  <div id="legend"><div style="color:#999">暂无机构，点右上角「＋新增机构」或「上传表格」</div></div>
+</div>
 
-  <div class="sec">
-    <b>新增机构</b>
+<!-- 右上:统计与操作按钮 -->
+<div id="topright">
+  <div class="cnt">已检查 <b id="ckcnt">0</b>/<span id="cktotal">0</span> 家</div>
+  <button class="hidebtn" id="hidebtn">隐藏已检查</button>
+  <button class="clearbtn" id="clearbtn">清除已检查</button>
+  <div class="sep"></div>
+  <button class="addbtn" id="addBtn">＋ 新增机构</button>
+  <button class="gray" id="upBtn">上传表格</button>
+  <button class="gray" id="tplBtn">下载模板</button>
+  <button class="gray" id="expBtn">导出数据</button>
+  <button class="warn" id="clearAllBtn">清空全部</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  <div id="xlsxState" style="font-size:11px;color:#888">表格组件加载中…</div>
+  <div id="logWrap"><b>操作记录</b><div id="log">等待操作…</div></div>
+</div>
+
+<!-- 新增弹框 -->
+<div id="addModal">
+  <div class="mbox">
+    <h3>新增机构</h3>
     <input id="f_e" placeholder="国家编码(如 H32054002738)">
     <input id="f_c" placeholder="园区代码(如 2476)">
     <input id="f_n" placeholder="机构名称">
     <input id="f_a" placeholder="地址(用于自动定位)">
     <input id="f_p" placeholder="负责人">
-    <button id="addBtn">定位并新增</button>
-    <button id="delBtn" class="warn">按国家编码删除</button>
+    <div class="mrow">
+      <button id="addConfirm">定位并新增</button>
+      <button id="delBtn" class="warn">按编码删除</button>
+      <button id="addClose" class="gray">取消</button>
+    </div>
   </div>
-
-  <div class="sec">
-    <button id="tplBtn" class="gray">下载模板</button>
-    <button id="upBtn">上传表格生成</button>
-    <button id="clearBtn" class="warn">清空全部</button>
-    <button id="expBtn" class="gray">导出当前数据(CSV)</button>
-    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
-    <div id="xlsxState" style="font-size:11px;color:#888">表格组件加载中…</div>
-  </div>
-
-  <div class="sec">
-    <b>负责人</b>
-    <div id="legend"></div>
-  </div>
-
-  <div class="sec"><b>操作记录</b><div id="log">输入机构信息后点「定位并新增」；或上传变更表。</div></div>
 </div>
-
 <script>
 const KEY = '71ee57c7d60c68ac00f29c11b251a595';
 let data = [];                       // 初始为空
@@ -868,7 +891,7 @@ function popupHtml(m){
     (done?'✓ 已检查(点此取消)':'标记为已检查')+'</button>';
 }
 function render(){
-  document.getElementById('headCnt').textContent = '('+data.length+'家)';
+  // 数量显示在右上角已检查统计处
   if (layerGroup) map.removeLayer(layerGroup);
   layerGroup = L.layerGroup().addTo(map);
   Object.keys(byE).forEach(k=>delete byE[k]);
@@ -892,7 +915,7 @@ function render(){
 }
 function buildLegend(){
   const el = document.getElementById('legend');
-  if (!data.length){ el.innerHTML = '<div style="color:#999">暂无机构，新增后显示</div>'; return; }
+  if (!data.length){ el.innerHTML = '<div style="color:#999">暂无机构，点右上角「＋新增机构」或「上传表格」</div>'; return; }
   let html = '<div class="pers'+(selPersons.size===0?' active':'')+'" data-p="">'+
     '<div class="pers-head"><span class="dot" style="background:#555"></span><b>全部</b><span class="cnt2"></span></div></div>';
   personList().forEach(p=>{
@@ -1007,31 +1030,39 @@ function doSearch(){
 sIn.addEventListener('input', doSearch);
 document.addEventListener('click', e=>{ if(!e.target.closest('#searchWrap')) sBox.style.display='none'; });
 
-// ===== 新增/删除 =====
-document.getElementById('addBtn').onclick = async ()=>{
+// ===== 新增弹框/删除 =====
+const addModal = document.getElementById('addModal');
+document.getElementById('addBtn').onclick = ()=>{ addModal.style.display='flex'; document.getElementById('f_e').focus(); };
+document.getElementById('addClose').onclick = ()=>{ addModal.style.display='none'; };
+addModal.addEventListener('click', (e)=>{ if (e.target===addModal) addModal.style.display='none'; });
+document.getElementById('addConfirm').onclick = async ()=>{
   const e = document.getElementById('f_e').value.trim();
   const c = document.getElementById('f_c').value.trim();
   const n = document.getElementById('f_n').value.trim();
   const a = document.getElementById('f_a').value.trim();
   const p = document.getElementById('f_p').value.trim();
   if (!e || !n || !a){ alert('国家编码、名称、地址必填'); return; }
+  const btn = document.getElementById('addConfirm'); btn.disabled = true;
   log('定位中: '+n+' …');
   const geo = await geocodeInst(n, a);
-  if (!geo){ log('✗ 定位失败: '+n,'err'); return; }
+  btn.disabled = false;
+  if (!geo){ log('✗ 定位失败: '+n+' (可尝试修改地址后重试)','err'); return; }
   const i = data.findIndex(x=>x.e===e);
-  if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
+  if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
   else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
   ['f_e','f_c','f_n','f_a','f_p'].forEach(id=>document.getElementById(id).value='');
+  addModal.style.display='none';
   render();
   if (data.length===1) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.3));
 };
 document.getElementById('delBtn').onclick = ()=>{
   const e = document.getElementById('f_e').value.trim();
-  if (!e){ alert('请在上方"国家编码"框填入要删除的编码'); return; }
+  if (!e){ alert('请先在国家编码框填入要删除的编码'); return; }
   const i = data.findIndex(x=>x.e===e);
   if (i<0){ log('✗ 删除失败(不存在): '+e,'err'); return; }
   const nm = data[i].n; data.splice(i,1); log('✓ 删除: '+e+' '+nm,'ok');
   document.getElementById('f_e').value='';
+  addModal.style.display='none';
   render();
 };
 
@@ -1129,7 +1160,7 @@ document.getElementById('tplBtn').onclick = ()=>{
   XLSX.utils.book_append_sheet(wb, ws, '变更表');
   XLSX.writeFile(wb, '地图变更模板.xlsx');
 };
-document.getElementById('clearBtn').onclick = ()=>{
+document.getElementById('clearAllBtn').onclick = ()=>{
   if (!confirm('清空当前全部机构?(已检查状态也会清空)')) return;
   data = []; checked.clear(); saveChecked(); log('已清空全部机构','warnc'); render();
 };
@@ -1141,6 +1172,13 @@ document.getElementById('expBtn').onclick = ()=>{
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = '机构数据.csv'; a.click();
 };
+
+// ===== 手机端面板开关 =====
+function isMobile(){ try { return window.matchMedia && window.matchMedia('(max-width: 760px)').matches; } catch(e){ return false; } }
+const panelEl = document.getElementById('panel'), tgEl = document.getElementById('togglePanel');
+tgEl.addEventListener('click', ()=>{ panelEl.style.display='block'; tgEl.style.display='none'; });
+if (isMobile()){ panelEl.style.display='none'; tgEl.style.display='block'; }
+window.addEventListener('resize', ()=>{ panelEl.style.display = isMobile() ? 'none' : 'block'; tgEl.style.display = isMobile() ? 'block' : 'none'; });
 
 // ===== 初始化 =====
 map = L.map('map').setView([31.32,120.72], 12);
