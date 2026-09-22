@@ -841,41 +841,118 @@ function log(msg, cls){
 }
 function norm(s){ return String(s==null?'':s).replace(/\s/g,'').replace(/[（）()【】]/g,''); }
 
-// ===== 定位(名称POI优先,地址门址兜底) =====
+// ===== 定位:以输入地址为准,机构名仅在与地址一致时精修 =====
+function distKm(a,b){
+  const R=6371, r=x=>x*Math.PI/180;
+  const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
+  const h=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function inSip(lat,lng){ return lat>=31.15 && lat<=31.45 && lng>=120.5 && lng<=120.95; }
+function roadOf(addr){
+  const m = String(addr).match(/([一-龥A-Za-z0-9]{2,12}(?:路|街|大道|巷|弄|广场|邻里中心))/);
+  return m ? m[1] : '';
+}
+async function geoAddr(addr){
+  try {
+    const u = 'https://restapi.amap.com/v3/geocode/geo?address='+encodeURIComponent(addr)+'&city=苏州&key='+KEY;
+    const r = await (await fetch(u)).json();
+    if (r.status==='1' && r.geocodes){
+      return r.geocodes.map(g=>{
+        const ll=(g.location||'').split(',');
+        return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), level:g.level||'', faddr:g.formatted_address||''};
+      }).filter(g=>!isNaN(g.lat));
+    }
+  } catch(e){}
+  return [];
+}
+async function poiRaw(kw){
+  try {
+    const u = 'https://restapi.amap.com/v3/place/text?keywords='+encodeURIComponent(kw)+'&city=苏州&key='+KEY+'&offset=10';
+    const r = await (await fetch(u)).json();
+    if (r.status==='1' && r.pois){
+      return r.pois.map(p=>{
+        const ll=(p.location||'').split(',');
+        return {name:p.name||'', address:p.address||'', lat:parseFloat(ll[1]), lng:parseFloat(ll[0])};
+      }).filter(p=>!isNaN(p.lat));
+    }
+  } catch(e){}
+  return [];
+}
+async function poiName(name){
+  try {
+    const u = 'https://restapi.amap.com/v3/place/text?keywords='+encodeURIComponent(name)+'&city=苏州&key='+KEY+'&offset=10';
+    const r = await (await fetch(u)).json();
+    if (r.status==='1' && r.pois && r.pois.length){
+      const nm = norm(name);
+      const core = nm.replace(/苏州工业园区/g,'').replace(/有限公司/g,'').replace(/诊所|门诊部|药房|药店|大药房/g,'');
+      const cand = r.pois.filter(p=>{
+        const pn = norm(p.name||'');
+        if (pn===nm) return true;
+        if (!core) return false;
+        if (core.length < 3) return false;          // 2字前缀易误配(如"新光"→新光天地)
+        return pn.indexOf(core)>=0;
+      });
+      if (cand.length){
+        const c0 = cand[0];
+        const ll = (c0.location||'').split(',');
+        if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'POI名称', faddr:(c0.name||'')+(c0.address?(' / '+c0.address):'')};
+      }
+    }
+  } catch(e){}
+  return null;
+}
+function cleanTok(t){
+  return String(t).replace(/^苏州工业园区/,'').replace(/^工业园区/,'').replace(/^苏州市/,'').replace(/^苏州/,'');
+}
+function tokensOf(addr){
+  const toks = [];
+  const m1 = String(addr).match(/([一-龥A-Za-z0-9]{2,12}(?:路|街|大道|巷|弄))/);
+  const m2 = String(addr).match(/([一-龥A-Za-z0-9]{2,14}(?:大厦|广场|邻里中心|花园|新村|小区|公寓|产业园|科技园|商业街|中心|苑|城|墅))/);
+  if (m1) toks.push(cleanTok(m1[1]));
+  if (m2){ const t2 = cleanTok(m2[1]); if (!m1 || t2!==cleanTok(m1[1])) toks.push(t2); }
+  return toks.filter(t=>t.length>=2);
+}
+const BAD_LEVELS = ['区县','城市','省份','乡镇','未知',''];
+function acceptGeo(g, toks){
+  if (!inSip(g.lat,g.lng)) return false;
+  if (BAD_LEVELS.indexOf(g.level||'')>=0) return false;
+  if (!toks.length) return true;
+  return toks.some(t=> (g.faddr||'').indexOf(t)>=0);
+}
 async function geocodeInst(name, addr){
-  try {
-    if (name){
-      const u1 = 'https://restapi.amap.com/v3/place/text?keywords='+encodeURIComponent(name)+'&city=苏州&key='+KEY+'&offset=10';
-      const r1 = await (await fetch(u1)).json();
-      if (r1.status==='1' && r1.pois && r1.pois.length){
-        const nm = norm(name);
-        const core = nm.replace(/苏州工业园区/g,'').replace(/有限公司/g,'').replace(/诊所|门诊部|药房|药店|大药房/g,'');
-        const cand = r1.pois.filter(p=>{
-          const pn = norm(p.name||'');
-          return (core && pn.indexOf(core)>=0) || pn===nm;
-        });
-        if (cand.length){
-          const c0 = cand[0];
-          const ll = (c0.location||'').split(',');
-          if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'POI名称', faddr:(c0.name||'')+(c0.address?(' / '+c0.address):'')};
-        }
+  const toks = tokensOf(addr);
+  // 1) 地址直接定位(按校验规则挑最优)
+  let B = null;
+  const list = await geoAddr(addr);
+  const good = list.filter(g=>acceptGeo(g,toks));
+  let g = good.find(x=>x.level==='门址'||x.level==='门牌号')
+       || good.find(x=>['兴趣点','住宅区','楼宇','商务写字楼','小巷','村庄','地铁站'].indexOf(x.level)>=0)
+       || good.find(x=>x.level==='道路');
+  if (g) B = {lat:g.lat, lng:g.lng, src:'地址('+g.level+')', faddr:g.faddr, approx:(g.level==='道路'||g.level==='小巷')};
+  // 2) 用路名/建筑名再定位(近似)
+  if (!B){
+    for (const tk of toks){
+      const l2 = await geoAddr('苏州工业园区'+tk);
+      const b2 = l2.filter(x=>acceptGeo(x,toks)).find(x=>x.level!=='道路') || l2.filter(x=>acceptGeo(x,toks))[0];
+      if (b2){ B = {lat:b2.lat, lng:b2.lng, src:'近似('+tk+')', faddr:b2.faddr, approx:true}; break; }
+      // 建筑物 POI 搜索(仅"大厦/广场/中心"等建筑词,且名称必须包含该词)
+      const isBuilding = /(大厦|广场|邻里中心|产业园|科技园|商业街|中心|苑|城)/.test(tk);
+      if (isBuilding){
+        const pl = await poiRaw('苏州工业园区'+tk);
+        const pp = pl.find(p=>norm(p.name).indexOf(tk)>=0 && inSip(p.lat,p.lng));
+        if (pp){ B = {lat:pp.lat, lng:pp.lng, src:'建筑('+tk+')', faddr:pp.name+(pp.address?(' / '+pp.address):''), approx:true}; break; }
       }
     }
-  } catch(e){}
-  try {
-    if (addr){
-      const u2 = 'https://restapi.amap.com/v3/geocode/geo?address='+encodeURIComponent(addr)+'&city=苏州&key='+KEY;
-      const r2 = await (await fetch(u2)).json();
-      if (r2.status==='1' && r2.geocodes && r2.geocodes.length){
-        const gs = r2.geocodes;
-        const good = gs.find(g=>(g.level==='门址'||g.level==='门牌号') && (g.formatted_address||'').indexOf('工业园区')>=0)
-                  || gs.find(g=>(g.formatted_address||'').indexOf('工业园区')>=0)
-                  || gs[0];
-        const ll = (good.location||'').split(',');
-        if (ll.length===2) return {lat:parseFloat(ll[1]), lng:parseFloat(ll[0]), src:'地址'+(good.level||''), faddr:good.formatted_address||''};
-      }
-    }
-  } catch(e){}
+  }
+  // 3) 机构名补充/精修
+  const A = await poiName(name);
+  if (A && B){
+    if (distKm(A,B) <= 2) return {lat:A.lat, lng:A.lng, src:'名称精修', faddr:A.faddr+' (与地址一致)'};
+    return {lat:B.lat, lng:B.lng, src:B.src, faddr:B.faddr, approx:B.approx, conflict:A.faddr};
+  }
+  if (B) return B;
+  if (A) return {lat:A.lat, lng:A.lng, src:'名称定位(地址未匹配)', faddr:A.faddr, approx:true};
   return null;
 }
 
@@ -1064,7 +1141,9 @@ document.getElementById('addConfirm').onclick = async ()=>{
   const i = data.findIndex(x=>x.e===e);
   if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:t||data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
   else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
-  log('　 定位到: '+(geo.faddr||'')+' → '+(+geo.lat).toFixed(5)+','+(+geo.lng).toFixed(5), 'warnc');
+  log('　 定位依据['+geo.src+']: '+(geo.faddr||'')+' → '+(+geo.lat).toFixed(5)+','+(+geo.lng).toFixed(5), 'warnc');
+  if (geo.approx) log('　 ⚠ 该定位为近似(道路/建筑级),请核对;不准可在弹框填纬度/经度','err');
+  if (geo.conflict) log('　 ⚠ 名称搜到的位置与地址不一致(已采用地址): '+geo.conflict,'err');
   ['f_e','f_c','f_n','f_a','f_p','f_t','f_lat','f_lng'].forEach(id=>document.getElementById(id).value='');
   addModal.style.display='none';
   render();
