@@ -714,6 +714,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
  #panel{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(255,255,255,.97);border-radius:10px;
    padding:12px;box-shadow:0 2px 10px rgba(0,0,0,.25);width:320px;max-height:80vh;overflow:auto;font-size:13px}
  #panel h2{margin:0 0 8px;font-size:14px}
+ #panel .gsel{margin:0 0 8px;color:#555;font-size:12px}
+ #panel .gsel select{max-width:180px;padding:3px 6px;border:1px solid #ddd;border-radius:6px}
  #togglePanel{position:absolute;top:10px;left:10px;z-index:1001;display:none;padding:10px 14px;border:none;border-radius:8px;
    background:#333;color:#fff;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
  #topright{position:absolute;top:10px;right:10px;z-index:1000;background:rgba(255,255,255,.97);border-radius:10px;
@@ -790,6 +792,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <button id="togglePanel">☰ 负责人</button>
 <div id="panel">
   <h2>按负责人筛选</h2>
+  <div class="gsel">组名: <select id="groupSel"><option value="">全部</option></select></div>
   <div id="legend"><div style="color:#999">暂无机构，点右上角「＋新增机构」或「上传表格」</div></div>
 </div>
 
@@ -813,6 +816,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <div id="addModal">
   <div class="mbox">
     <h3>新增机构</h3>
+    <div class="fld"><label>组名</label><input id="f_g" placeholder="如 第一组（可留空）"></div>
     <div class="fld"><label>国家编码</label><input id="f_e" placeholder="如 H32054002738"></div>
     <div class="fld"><label>园区代码</label><input id="f_c" placeholder="如 2476"></div>
     <div class="fld"><label>机构名称</label><input id="f_n" placeholder="如 苏州工业园区XX诊所"></div>
@@ -832,7 +836,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
 const KEY = '71ee57c7d60c68ac00f29c11b251a595';
 let data = [];                       // 初始为空
 try { const _s = localStorage.getItem('mg_data_v1'); if (_s) data = JSON.parse(_s) || []; } catch(e){ data = []; }
-function saveData(){ try{ localStorage.setItem('mg_data_v1', JSON.stringify(data)); }catch(e){} }
+function saveData(){ try{ localStorage.setItem('mg_data_v1', JSON.stringify(data)); localStorage.setItem('mg_ts_v1', String(Date.now())); }catch(e){} uploadCloud(); }
+// ===== 云同步(跨设备) =====
+const CLOUD = {ns:'mg1790132568', path:'data', key:'1e1ccb4ec8f18e08eb35f29eb227ca5034eeda033a059aa461b5909d4fa20693'};
+let upTimer = null;
+function uploadCloud(){
+  clearTimeout(upTimer);
+  upTimer = setTimeout(function(){
+    fetch('https://mantledb.sh/v2/'+CLOUD.ns+'/'+CLOUD.path, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','X-Mantle-Key':CLOUD.key},
+      body: JSON.stringify({data:data, checked:[...checked], ts:Date.now()})
+    }).catch(function(){});
+  }, 1200);
+}
+
 let map = null;
 const byE = {};                      // code -> {mk, m}
 let layerGroup = null;
@@ -840,9 +858,10 @@ const PALETTE = ['#e6194b','#4363d8','#3cb44b','#f58231','#911eb4','#008080','#9
 const pcol = {};
 let checked = new Set();
 try { checked = new Set(JSON.parse(localStorage.getItem('mg_ck_v1')||'[]')); } catch(e){ checked = new Set(); }
-function saveChecked(){ try{ localStorage.setItem('mg_ck_v1', JSON.stringify([...checked])); }catch(e){} }
+function saveChecked(){ try{ localStorage.setItem('mg_ck_v1', JSON.stringify([...checked])); localStorage.setItem('mg_ts_v1', String(Date.now())); }catch(e){} uploadCloud(); }
 let hideChecked = true;
 let selPersons = new Set();
+let curGroup = '';
 
 function pc(p){
   if (!p) return '#888';
@@ -1029,18 +1048,25 @@ function render(){
     mk.bindPopup(popupHtml(m));
     byE[m.e] = {mk, m};
   });
+  const gsel = document.getElementById('groupSel');
+  const groups = [...new Set(data.map(m=>m.g).filter(Boolean))].sort();
+  gsel.innerHTML = '<option value="">全部</option>' + groups.map(g=>'<option>'+g+'</option>').join('');
+  if (curGroup && groups.indexOf(curGroup)<0) curGroup = '';
+  gsel.value = curGroup;
   buildLegend();
   refreshVisibility();
   saveData();
 }
+function groupData(){ return curGroup ? data.filter(m=>m.g===curGroup) : data; }
 function buildLegend(){
   const el = document.getElementById('legend');
-  if (!data.length){ el.innerHTML = '<div style="color:#999">暂无机构，点右上角「＋新增机构」或「上传表格」</div>'; return; }
+  const gd = groupData();
+  if (!gd.length){ el.innerHTML = '<div style="color:#999">'+(data.length?'该组暂无机构':'暂无机构，点右上角「＋新增机构」或「上传表格」')+'</div>'; return; }
   let html = '<div class="pers'+(selPersons.size===0?' active':'')+'" data-p="">'+
     '<div class="pers-head"><span class="dot" style="background:#555"></span><b>全部</b><span class="cnt2"></span></div></div>';
-  personList().forEach(p=>{
+  [...new Set(gd.map(m=>m.p).filter(Boolean))].sort().forEach(p=>{
     const on = selPersons.has(p);
-    const items = data.filter(m=>m.p===p)
+    const items = gd.filter(m=>m.p===p)
       .sort((a,b)=>(checked.has(a.e)?1:0)-(checked.has(b.e)?1:0))
       .map(m=>'<div class="iitem'+(checked.has(m.e)?' done':'')+'" data-e="'+m.e+'">'+
         '<input type="checkbox" class="ckbox" data-e="'+m.e+'" '+(checked.has(m.e)?'checked':'')+'>'+
@@ -1090,18 +1116,19 @@ function refreshVisibility(){
     const done = checked.has(m.e);
     if (done) cnt++;
     o.mk.setIcon(mkIcon(m));
-    const visible = (selPersons.size===0 || selPersons.has(m.p)) && !(done && hideChecked);
+    const visible = (curGroup==='' || m.g===curGroup) && (selPersons.size===0 || selPersons.has(m.p)) && !(done && hideChecked);
     if (visible && !layerGroup.hasLayer(o.mk)) layerGroup.addLayer(o.mk);
     if (!visible && layerGroup.hasLayer(o.mk)) layerGroup.removeLayer(o.mk);
   });
-  const total = data.filter(m=> selPersons.size===0 || selPersons.has(m.p)).length;
+  const gd = groupData();
+  const total = gd.filter(m=> selPersons.size===0 || selPersons.has(m.p)).length;
   document.getElementById('cktotal').textContent = total;
   document.getElementById('ckcnt').textContent = cnt;
   document.getElementById('hidebtn').classList.toggle('off', !hideChecked);
   document.getElementById('hidebtn').textContent = hideChecked ? '显示已检查' : '隐藏已检查';
   document.querySelectorAll('#legend .pers').forEach(row=>{
     const p = row.dataset.p;
-    const members = p==='' ? data : data.filter(m=>m.p===p);
+    const members = p==='' ? gd : gd.filter(m=>m.p===p);
     const tot = members.length;
     const don = members.filter(m=>checked.has(m.e)).length;
     const c2 = row.querySelector('.cnt2');
@@ -1141,6 +1168,13 @@ window.toggleCheck = function(e){
   const o = byE[e];
   if (o) o.mk.setPopupContent(popupHtml(o.m));
 };
+document.getElementById('groupSel').addEventListener('change', (e)=>{
+  curGroup = e.target.value;
+  buildLegend();
+  refreshVisibility();
+  const gd = groupData();
+  if (gd.length) map.fitBounds(L.latLngBounds(gd.map(m=>[m.lat,m.lng])).pad(0.1));
+});
 document.getElementById('hidebtn').addEventListener('click', ()=>{ hideChecked=!hideChecked; refreshVisibility(); });
 document.getElementById('clearbtn').addEventListener('click', ()=>{ checked.clear(); saveChecked(); refreshVisibility(); });
 
@@ -1172,6 +1206,7 @@ document.getElementById('addBtn').onclick = ()=>{ addModal.style.display='flex';
 document.getElementById('addClose').onclick = ()=>{ addModal.style.display='none'; };
 addModal.addEventListener('click', (e)=>{ if (e.target===addModal) addModal.style.display='none'; });
 document.getElementById('addConfirm').onclick = async ()=>{
+  const g = document.getElementById('f_g').value.trim();
   const e = document.getElementById('f_e').value.trim();
   const c = document.getElementById('f_c').value.trim();
   const n = document.getElementById('f_n').value.trim();
@@ -1188,12 +1223,12 @@ document.getElementById('addConfirm').onclick = async ()=>{
   btn.disabled = false;
   if (!geo){ log('✗ 定位失败: '+n+' (可修改地址重试,或在弹框里手动填纬度/经度)','err'); return; }
   const i = data.findIndex(x=>x.e===e);
-  if (i>=0){ data[i] = {e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:t||data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
-  else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
+  if (i>=0){ data[i] = {g:g||data[i].g,e:e,c:c,n:n,a:a,p:p||data[i].p,lat:geo.lat,lng:geo.lng,t:t||data[i].t||''}; log('✓ 已存在,已更新: '+n+' ('+geo.src+')','ok'); }
+  else { data.push({g:g,e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增: '+n+' ('+geo.src+')','ok'); }
   log('　 定位依据['+geo.src+']: '+(geo.faddr||'')+' → '+(+geo.lat).toFixed(5)+','+(+geo.lng).toFixed(5), 'warnc');
   if (geo.approx) log('　 ⚠ 该定位为近似(道路/建筑级),请核对;不准可在弹框填纬度/经度','err');
   if (geo.conflict) log('　 ⚠ 名称搜到的位置与地址不一致(已采用地址): '+geo.conflict,'err');
-  ['f_e','f_c','f_n','f_a','f_p','f_t','f_lat','f_lng'].forEach(id=>document.getElementById(id).value='');
+  ['f_g','f_e','f_c','f_n','f_a','f_p','f_t','f_lat','f_lng'].forEach(id=>document.getElementById(id).value='');
   addModal.style.display='none';
   render();
   if (data.length===1) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.3));
@@ -1234,6 +1269,7 @@ async function applyRows(rows){
   for (const row of rows){
     const e = String(pickCol(row, ['国家编码','国家编号','国码','编码'])||'').trim();
     const op = String(pickCol(row, ['操作','变更类型','变更'])||'').trim();
+    const g = String(pickCol(row, ['组名','分组','小组'])||'').trim();
     const c = String(pickCol(row, ['园区代码','园区编码','园区编号'])||'').trim();
     const n = String(pickCol(row, ['名称','机构名称','定点单位名称'])||'').trim();
     const a = String(pickCol(row, ['地址','定点单位地址'])||'').trim();
@@ -1276,13 +1312,14 @@ async function applyRows(rows){
     }
     if (act.indexOf('新')>=0){
       if (!geo){ fail++; log('✗ 新增定位失败,已跳过: '+e+' '+n,'err'); continue; }
-      if (idx>=0){ data[idx] = {e:e,c:c||data[idx].c,n:n,a:a,p:p||data[idx].p,lat:geo.lat,lng:geo.lng,t:t||data[idx].t||''}; log('✓ 已存在,按修改处理: '+e+' '+n,'ok'); }
-      else { data.push({e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增 '+e+' '+n+' ('+geo.src+')','ok'); }
+      if (idx>=0){ data[idx] = {g:g||data[idx].g,e:e,c:c||data[idx].c,n:n,a:a,p:p||data[idx].p,lat:geo.lat,lng:geo.lng,t:t||data[idx].t||''}; log('✓ 已存在,按修改处理: '+e+' '+n,'ok'); }
+      else { data.push({g:g,e:e,c:c,n:n,a:a,p:p,lat:geo.lat,lng:geo.lng,t:t||''}); log('✓ 新增 '+e+' '+n+' ('+geo.src+')','ok'); }
       add++;
     } else {
       if (idx<0){ fail++; log('✗ 修改失败(编码不存在): '+e,'err'); continue; }
       const cur = data[idx];
       cur.n = n; cur.c = c; cur.a = a; cur.p = p; cur.t = t;
+      if (g) cur.g = g;
       if (geo){ cur.lat = geo.lat; cur.lng = geo.lng; log('✓ 修改 '+e+' '+cur.n+' (重新定位:'+geo.src+')','ok'); }
       else log('✓ 修改 '+e+' '+cur.n+' (位置未变)','ok');
       mod++;
@@ -1309,11 +1346,11 @@ document.getElementById('fileInput').addEventListener('change', async function()
   this.value='';
 });
 document.getElementById('tplBtn').onclick = async ()=>{
-  const head = ['操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查'];
+  const head = ['组名','操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查'];
   const samples = [
-    ['新增','2476','H32054002738','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦','2025-09-30','是'],
-    ['修改','2477','H32054000000','机构新名称','苏州工业园区XX路1号','徐心悦','2025-01-01','否'],
-    ['删除','','H32054000001','','','','','']
+    ['第一组','新增','2476','H32054002738','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦','2025-09-30','是'],
+    ['第一组','修改','2477','H32054000000','机构新名称','苏州工业园区XX路1号','徐心悦','2025-01-01','否'],
+    ['','删除','','H32054000001','','','','','']
   ];
   if (window.ExcelJS){
     try{
@@ -1322,11 +1359,11 @@ document.getElementById('tplBtn').onclick = async ()=>{
       ws.addRow(head);
       samples.forEach(r=>ws.addRow(r));
       ws.getRow(1).font = { bold:true };
-      const widths = [9,10,20,30,45,10,14,10];
+      const widths = [12,9,10,20,30,45,10,14,10];
       widths.forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
       for (let r=2; r<=1000; r++){
-        ws.getCell('A'+r).dataValidation = { type:'list', allowBlank:true, formulae:['"新增,修改,删除"'] };
-        ws.getCell('H'+r).dataValidation = { type:'list', allowBlank:true, formulae:['"是,否"'] };
+        ws.getCell('B'+r).dataValidation = { type:'list', allowBlank:true, formulae:['"新增,修改,删除"'] };
+        ws.getCell('I'+r).dataValidation = { type:'list', allowBlank:true, formulae:['"是,否"'] };
       }
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -1348,8 +1385,8 @@ document.getElementById('clearAllBtn').onclick = ()=>{
   data = []; checked.clear(); saveChecked(); log('已清空全部机构','warnc'); render();
 };
 document.getElementById('expBtn').onclick = ()=>{
-  const head = ['操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查','纬度','经度'];
-  const lines = [head.join(',')].concat(data.map(m=>['',m.c,m.e,m.n,m.a,m.p,m.t,(checked.has(m.e)?'是':'否'),m.lat,m.lng]
+  const head = ['组名','操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查','纬度','经度'];
+  const lines = [head.join(',')].concat(data.map(m=>[m.g||'', '',m.c,m.e,m.n,m.a,m.p,m.t,(checked.has(m.e)?'是':'否'),m.lat,m.lng]
     .map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')));
   const blob = new Blob(['\ufeff'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
@@ -1369,6 +1406,24 @@ L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scal
   {subdomains:['1','2','3','4'], maxZoom:18, detectRetina:true, attribution:'高德'}).addTo(map);
 render();
 if (data.length) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.1));
+// 云端拉取:较新则采用,否则上传本地
+fetch('https://mantledb.sh/v2/'+CLOUD.ns+'/'+CLOUD.path)
+ .then(r=>r.json().catch(()=>null))
+ .then(d=>{
+   let localTs = 0;
+   try{ localTs = parseInt(localStorage.getItem('mg_ts_v1')||'0',10)||0; }catch(e){}
+   if (d && Array.isArray(d.data) && (d.ts||0) > localTs){
+     data = d.data;
+     checked = new Set(d.checked||[]);
+     saveChecked();
+     render();
+     log('已从云端同步 '+(data.length)+' 家机构','ok');
+     if (data.length) map.fitBounds(L.latLngBounds(data.map(m=>[m.lat,m.lng])).pad(0.1));
+   } else {
+     uploadCloud();
+   }
+ })
+ .catch(()=>{ uploadCloud(); });
 </script>
 </body>
 </html>
