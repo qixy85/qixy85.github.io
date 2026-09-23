@@ -691,6 +691,22 @@ svg.leaflet-image-layer.leaflet-interactive path {
   }
   next();
 })();
+(function(){
+  var urls=[
+    'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
+    'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js',
+    'https://cdn.bootcdn.net/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+    'https://cdn.staticfile.org/exceljs/4.4.0/exceljs.min.js'
+  ];
+  var i=0;
+  function next(){
+    if(i>=urls.length){ window.__exceljsFail=true; return; }
+    var sc=document.createElement('script'); sc.src=urls[i++];
+    sc.onerror=next;
+    document.head.appendChild(sc);
+  }
+  next();
+})();
 </script>
 <style>
  html,body{margin:0;height:100%;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
@@ -1239,12 +1255,20 @@ async function applyRows(rows){
       if (yes){ checked.add(e); log('　 ✓ '+e+' 标记为已检查','ok'); }
       else if (no){ checked.delete(e); log('　 ○ '+e+' 标记为未检查','warnc'); }
     }
+    // 修改:先校验所有字段必填(避免无效定位请求)
+    if (act.indexOf('修')>=0 && idx>=0){
+      const miss = [];
+      if (!c) miss.push('园区代码'); if (!n) miss.push('名称'); if (!a) miss.push('地址');
+      if (!p) miss.push('负责人'); if (!t) miss.push('最后检查日期');
+      if (miss.length){ fail++; log('✗ 修改需填写全部字段(缺: '+miss.join('/')+' ): '+e,'err'); continue; }
+    }
     const tLat = parseFloat(pickCol(row, ['纬度','lat']));
     const tLng = parseFloat(pickCol(row, ['经度','lng','lon']));
     let geo = null;
     if (!isNaN(tLat) && !isNaN(tLng)){ geo = {lat:tLat, lng:tLng, src:'表格坐标', faddr:'表格提供'}; }
     else {
-      const needGeo = (act.indexOf('新')>=0) || (act.indexOf('修')>=0 && a && a !== (idx>=0?data[idx].a:''));
+      const needGeo = (act.indexOf('新')>=0)
+        || (act.indexOf('修')>=0 && a && (!idx || !data[idx] || a !== data[idx].a));
       if (needGeo){
         geo = await geocodeByAddr(a || (idx>=0?data[idx].a:''));
         await new Promise(r=>setTimeout(r,150));
@@ -1258,11 +1282,7 @@ async function applyRows(rows){
     } else {
       if (idx<0){ fail++; log('✗ 修改失败(编码不存在): '+e,'err'); continue; }
       const cur = data[idx];
-      if (n) cur.n = n;
-      if (c) cur.c = c;
-      if (a) cur.a = a;
-      if (p) cur.p = p;
-      if (t) cur.t = t;
+      cur.n = n; cur.c = c; cur.a = a; cur.p = p; cur.t = t;
       if (geo){ cur.lat = geo.lat; cur.lng = geo.lng; log('✓ 修改 '+e+' '+cur.n+' (重新定位:'+geo.src+')','ok'); }
       else log('✓ 修改 '+e+' '+cur.n+' (位置未变)','ok');
       mod++;
@@ -1288,18 +1308,40 @@ document.getElementById('fileInput').addEventListener('change', async function()
   } catch(e){ log('✗ 文件解析失败: '+e.message,'err'); }
   this.value='';
 });
-document.getElementById('tplBtn').onclick = ()=>{
-  if (typeof XLSX === 'undefined'){ alert('表格组件还在加载,请稍候'); return; }
-  const rows = [
-    ['操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查'],
+document.getElementById('tplBtn').onclick = async ()=>{
+  const head = ['操作','园区代码','国家编码','名称','地址','负责人','最后检查日期','是否检查'];
+  const samples = [
     ['新增','2476','H32054002738','苏州工业园区普善诊所','苏州工业园区榭雨街329号太阳星辰三区78幢103室','徐心悦','2025-09-30','是'],
-    ['修改','','H32054000000','机构新名称','苏州工业园区XX路1号','徐心悦','','否'],
+    ['修改','2477','H32054000000','机构新名称','苏州工业园区XX路1号','徐心悦','2025-01-01','否'],
     ['删除','','H32054000001','','','','','']
   ];
-  const ws = XLSX.utils.aoa_to_sheet(rows);
+  if (window.ExcelJS){
+    try{
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('变更表');
+      ws.addRow(head);
+      samples.forEach(r=>ws.addRow(r));
+      ws.getRow(1).font = { bold:true };
+      const widths = [9,10,20,30,45,10,14,10];
+      widths.forEach((w,i)=>{ ws.getColumn(i+1).width = w; });
+      for (let r=2; r<=1000; r++){
+        ws.getCell('A'+r).dataValidation = { type:'list', allowBlank:true, formulae:['"新增,修改,删除"'] };
+        ws.getCell('H'+r).dataValidation = { type:'list', allowBlank:true, formulae:['"是,否"'] };
+      }
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = '地图变更模板.xlsx'; a.click();
+      log('已下载模板(操作/是否检查为下拉选择)','ok');
+      return;
+    }catch(e){ log('exceljs模板失败,改用基础模板: '+e.message,'warnc'); }
+  }
+  if (typeof XLSX === 'undefined'){ alert('表格组件还在加载,请稍候'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([head].concat(samples));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '变更表');
   XLSX.writeFile(wb, '地图变更模板.xlsx');
+  log('已下载模板(未带下拉,表格组件exceljs未就绪)','warnc');
 };
 document.getElementById('clearAllBtn').onclick = ()=>{
   if (!confirm('清空当前全部机构?(已检查状态也会清空)')) return;
